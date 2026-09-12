@@ -101,14 +101,23 @@ The frontend in this repo is a single static `index.html` that calls the API at
 a relative `/api` path. To deploy it separately from the API, it needs to know
 the API's absolute URL.
 
-**Quickest path** — deploy the static file as-is:
+**How this repo is wired** — a rewrite proxy, so no code change is needed.
 
-1. Vercel → **Add New** → **Project** → import the repo
-2. Root directory: `frontend`
-3. Framework preset: **Other**
-4. Add environment variable `NEXT_PUBLIC_API_URL` = your Render API URL
-5. In `frontend/index.html`, change `const API = '/api'` to point at the Render
-   URL.
+`frontend/vercel.json` rewrites `/api/*` through to the Render API:
+
+```json
+{ "rewrites": [{ "source": "/api/:path*",
+                 "destination": "https://jobaggregator-api.onrender.com/api/:path*" }] }
+```
+
+`index.html` keeps `const API = '/api'` untouched. Because the browser only ever
+talks to the Vercel origin, the requests are same-origin and **CORS never enters
+the picture** — that removes the most common way this deployment breaks.
+
+If your Render service ends up on a different hostname, update the `destination`
+in `frontend/vercel.json` and redeploy.
+
+Project settings: root directory `frontend`, framework preset **Other**.
 
 **The path you actually want** — rewrite the frontend as Next.js.
 
@@ -124,15 +133,17 @@ That rewrite is a real chunk of work and isn't in this repo yet.
 
 ## Step 3 — Connect the two
 
-Back in Render → API service → Environment:
+With the rewrite proxy in Step 2, browser calls are same-origin, so
+`CORS_ORIGINS` is **not** required for the frontend to work.
+
+Set it anyway to close the API off from other origins:
 
 ```
 CORS_ORIGINS = https://your-project.vercel.app
 ```
 
-Save; Render redeploys. Without this the browser blocks every API call from the
-Vercel domain, and the symptom looks like a broken frontend rather than a CORS
-problem.
+Save; Render redeploys. Leaving it blank defaults to `*`, which still works here
+but leaves the API callable from any site.
 
 Verify:
 
@@ -149,7 +160,7 @@ curl https://jobaggregator-api.onrender.com/api/stats
 |---|---|---|
 | `DATABASE_URL` | yes | Postgres connection string. Defaults to local SQLite |
 | `JWT_SECRET` | yes in prod | Signs session tokens. Without it, one is generated per process — sessions break across workers and die on restart |
-| `CORS_ORIGINS` | yes in prod | Comma-separated allowed origins. Defaults to `*` |
+| `CORS_ORIGINS` | recommended | Comma-separated allowed origins. Defaults to `*`. Not needed for the frontend, which proxies same-origin via `frontend/vercel.json` |
 | `JWT_TTL_DAYS` | no | Session lifetime, default 30 |
 | `ANTHROPIC_API_KEY` | no | Enables LLM normalization fallback. Omit for rules-only |
 | `ALERT_WEBHOOK_URL` | no | Scrape failure and anomaly alerts |
