@@ -592,11 +592,15 @@ function renderFacet(key, items, initial){
   const open = S.expanded[key];
   const shown = open ? items : items.slice(0, initial);
   const body = shown.map(it=>{
+    /* `value` is what the API filters on (a slug for companies); `label` is
+       what a human reads. They differ for companies and are identical
+       elsewhere, so always submit value and always display label. */
     const v = it.value ?? it.name ?? it;
+    const lbl = it.label ?? v;
     const n = it.count ?? 0;
     const on = S[key].includes(v);
     return `<label class="opt"><input type="checkbox" data-k="${key}" value="${esc(v)}"${on?' checked':''}>
-      <span class="lbl" title="${esc(v)}">${esc(v)}</span><span class="n">${n.toLocaleString()}</span></label>`;
+      <span class="lbl" title="${esc(lbl)}">${esc(lbl)}</span><span class="n">${n.toLocaleString()}</span></label>`;
   }).join('');
   const more = items.length > initial
     ? `<button class="more" data-more="${key}">${open?'− Show less':'+ '+(items.length-initial)+' more'}</button>` : '';
@@ -616,12 +620,12 @@ function renderAllFacets(){
 function buildQuick(){
   if(!S.facets) return;
   const picks = [];
-  (S.facets.departments||[]).slice(0,4).forEach(d=>picks.push({k:'department',v:d.value??d.name}));
-  (S.facets.seniority_levels||[]).slice(0,3).forEach(d=>picks.push({k:'seniority',v:d.value??d.name}));
+  (S.facets.departments||[]).slice(0,4).forEach(d=>picks.push({k:'department',v:d.value??d.name,l:d.label??d.value??d.name}));
+  (S.facets.seniority_levels||[]).slice(0,3).forEach(d=>picks.push({k:'seniority',v:d.value??d.name,l:d.label??d.value??d.name}));
   el('quick').innerHTML =
     `<button class="qbtn${S.days==='1'?' on':''}" data-quick="fresh">⚡ New today</button>`+
     `<button class="qbtn${S.remote?' on':''}" data-quick="remote">◉ Remote</button>`+
-    picks.filter(p=>p.v).map(p=>`<button class="qbtn${S[p.k].includes(p.v)?' on':''}" data-qk="${p.k}" data-qv="${esc(p.v)}">${esc(p.v)}</button>`).join('');
+    picks.filter(p=>p.v).map(p=>`<button class="qbtn${S[p.k].includes(p.v)?' on':''}" data-qk="${p.k}" data-qv="${esc(p.v)}">${esc(p.l)}</button>`).join('');
 }
 
 /* ---------------- feed ---------------- */
@@ -834,10 +838,11 @@ function buildCmd(term){
     run:()=>{ S.q=term; el('q').value=term; S.page=1; S.savedOnly=false; load(); }});
   const add = (key, items, kind) => (items||[]).forEach(it=>{
     const v = it.value ?? it.name ?? it;
+    const lbl = it.label ?? v;
     if(!v) return;
-    if(t && !String(v).toLowerCase().includes(t)) return;
+    if(t && !String(lbl).toLowerCase().includes(t) && !String(v).toLowerCase().includes(t)) return;
     if(rows.length>28) return;
-    rows.push({kind, label:v, sub:(it.count??0).toLocaleString()+' roles', run:()=>{
+    rows.push({kind, label:lbl, sub:(it.count??0).toLocaleString()+' roles', run:()=>{
       if(!S[key].includes(v)) S[key].push(v);
       S.page=1; S.savedOnly=false; renderAllFacets(); load();
     }});

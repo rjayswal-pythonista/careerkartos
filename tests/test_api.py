@@ -2,6 +2,7 @@
 
 import os
 import sys
+from urllib.parse import quote
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,6 +93,24 @@ def main():
     check("facet counts sum sanely",
           sum(x["count"] for x in f["departments"]) <= f["total_active"])
     check("remote count present", f["remote_count"] > 0, f["remote_count"])
+
+    # Every facet value must be directly usable as a filter argument. The
+    # companies facet once emitted display names while /api/jobs filtered on
+    # slug, so selecting a company silently returned zero. Round-trip each
+    # facet family through the filter it feeds rather than trusting the shape.
+    for family, param in (("departments", "department"),
+                          ("seniority_levels", "seniority"),
+                          ("countries", "country"),
+                          ("companies", "company")):
+        top = f[family][0]
+        got = client.get(f"/api/jobs?{param}={quote(str(top['value']))}").json()["total"]
+        check(f"{family} facet value filters",
+              got == top["count"],
+              f"{top['value']!r} facet says {top['count']}, filter returns {got}")
+
+    check("companies facet carries a display label",
+          all("label" in c for c in f["companies"]),
+          "company facets need label for the UI, value stays the slug")
 
     print("\n--- Job detail, similar, apply redirect ---")
     jid = client.get("/api/jobs?per_page=1").json()["items"][0]["id"]

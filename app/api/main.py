@@ -228,11 +228,30 @@ def job_facets(db: DB):
         )
         return [{"value": v, "count": c} for v, c in db.execute(stmt).all()]
 
+    def grouped_companies():
+        """Companies facet carries both slug and name.
+
+        `value` must be the slug, because /api/jobs filters on Company.slug —
+        emitting the display name here produced a facet the filter endpoint
+        could never match, so every company filter silently returned zero.
+        `label` keeps the human-readable name for the UI.
+        """
+        stmt = (
+            select(Company.slug, Company.name, func.count())
+            .select_from(Job).join(Company)
+            .where(Job.status == "active")
+            .group_by(Company.slug, Company.name).order_by(desc(func.count()))
+        )
+        return [
+            {"value": slug, "label": name, "count": c}
+            for slug, name, c in db.execute(stmt).all()
+        ]
+
     return FacetsOut(
         departments=grouped(Job.department),
         seniority_levels=grouped(Job.seniority_level),
         countries=grouped(Job.location_country)[:30],
-        companies=grouped(Company.name)[:50],
+        companies=grouped_companies()[:50],
         remote_count=db.scalar(
             select(func.count()).select_from(Job)
             .where(Job.status == "active", Job.is_remote.is_(True))
