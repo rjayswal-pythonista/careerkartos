@@ -129,6 +129,34 @@ def _make_lever_payload(seed: int, count: int, drop: set[int] | None = None) -> 
     return out
 
 
+def _make_ashby_payload(seed: int, count: int, drop: set[int] | None = None) -> dict:
+    rng = random.Random(seed + 900)
+    drop = drop or set()
+    mix = _role_mix(seed + 900, count)
+    jobs = []
+    for i in range(count):
+        if i in drop:
+            continue
+        title, dept = mix[i]
+        loc = _LOCATIONS[(i * 5 + seed * 17) % len(_LOCATIONS)]
+        published = (
+            datetime.now(timezone.utc) - timedelta(days=rng.randint(0, 40))
+        ).isoformat()
+        jobs.append({
+            "id": f"fixture-ashby-{seed}-{i}",
+            "title": title,
+            "jobUrl": f"https://jobs.ashbyhq.com/fixture/{seed}-{i}",
+            "applyUrl": f"https://jobs.ashbyhq.com/fixture/{seed}-{i}/application",
+            "location": loc,
+            "department": dept,
+            "team": dept,
+            "publishedAt": published,
+            "descriptionPlain": _DESC.format(yrs=rng.choice([2, 3, 5, 7])),
+            "isListed": True,
+        })
+    return {"jobs": jobs}
+
+
 class FixtureTransport(httpx.AsyncBaseTransport):
     """Intercepts requests and returns recorded payloads, so the real connector
     parsers are exercised end to end without touching the network."""
@@ -156,6 +184,8 @@ class FixtureTransport(httpx.AsyncBaseTransport):
             payload = _make_greenhouse_payload(seed, self.count, self.drop)
         elif "lever" in url:
             payload = _make_lever_payload(seed, self.count, self.drop)
+        elif "ashby" in url:
+            payload = _make_ashby_payload(seed, self.count, self.drop)
         else:
             return httpx.Response(404, json={"error": "no fixture for this host"})
         return httpx.Response(200, json=payload, request=request)

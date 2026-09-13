@@ -111,7 +111,7 @@ def main():
 
     print("\n--- Companies ---")
     cs = client.get("/api/companies").json()
-    check("companies listed", len(cs) == 8, f"{len(cs)}")
+    check("companies listed", len(cs) == len(seeder.REGISTRY), f"{len(cs)}")
     check("active_jobs counted", all(c["active_jobs"] > 0 for c in cs))
     check("sorted by volume", cs == sorted(cs, key=lambda c: -c["active_jobs"]))
     one = client.get(f"/api/companies/{cs[0]['slug']}").json()
@@ -119,7 +119,9 @@ def main():
 
     print("\n--- Stats & health ---")
     st = client.get("/api/stats").json()
-    check("stats populated", st["total_active_jobs"] > 0 and st["total_companies"] == 8)
+    check("stats populated",
+          st["total_active_jobs"] > 0
+          and st["total_companies"] == len(seeder.REGISTRY))
     h = client.get("/api/health").json()
     check("health reports status", h["status"] in ("ok", "degraded"), h["status"])
 
