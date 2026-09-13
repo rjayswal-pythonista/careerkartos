@@ -48,53 +48,16 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 
 def init_db():
+    """Create any missing tables and the optimisations that are safe at startup.
+
+    Schema *changes* live in migrations/ and run as a deploy step, not here:
+    DDL at startup cannot survive more than one instance, because every booting
+    process would issue the same ALTER concurrently.
+    """
     Base.metadata.create_all(engine)
     _add_missing_columns()
-    _widen_text_columns()
     _backfill_company_name()
     _ensure_search_index()
-
-
-# Columns the model declares as Text. Earlier revisions bounded several of them,
-# and those widths survive in any database created before the change.
-_TEXT_COLUMNS = (
-    "title", "normalized_title", "location_raw", "location_country",
-    "location_city", "description_raw", "description_summary",
-)
-
-
-def _widen_text_columns():
-    """Bring column widths in line with the model.
-
-    create_all() and ADD COLUMN never alter an existing column's type, so a
-    field widened in the model stays narrow in a database that predates it. That
-    is not theoretical: jobs.location_* were bounded once, production still held
-    varchar(120), and a long location raised StringDataRightTruncation that
-    failed the entire company's batch — precisely what the model comment on
-    those columns warns about. The model was fixed; the database never was.
-
-    varchar -> text is catalogue-only in Postgres, so there is no table rewrite.
-    The current type is checked first so this does not re-issue DDL, and rebuild
-    the indexes on those columns, on every start.
-    """
-    if engine.dialect.name != "postgresql":
-        return   # SQLite does not enforce declared widths
-
-    try:
-        with engine.begin() as conn:
-            narrow = {
-                r[0] for r in conn.execute(text(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name = 'jobs' AND data_type <> 'text' "
-                    "AND column_name = ANY(:cols)"
-                ), {"cols": list(_TEXT_COLUMNS)})
-            }
-            for col in narrow:
-                # Identifiers come from the tuple above, never from input.
-                conn.execute(text(f'ALTER TABLE jobs ALTER COLUMN "{col}" TYPE TEXT'))
-                log.info("widened jobs.%s to TEXT", col)
-    except Exception as e:  # pragma: no cover
-        log.warning("column widening skipped: %s", e)
 
 
 def _add_missing_columns():
