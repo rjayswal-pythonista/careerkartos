@@ -60,6 +60,10 @@ Render reads `render.yaml` and provisions all three together.
 1. Render dashboard → **New** → **Blueprint**
 2. Connect the GitHub repo you just pushed
 3. Render shows a plan: one Postgres, one web service, one cron job. Approve it.
+
+   The cron job runs on the `starter` plan, not free — Render has no free tier
+   for cron. It bills per run with a **$1/month minimum**, so a once-daily
+   scrape costs about that. The database and API are still free tier.
 4. Fill the variables marked `sync: false`:
 
 | Variable | Where | Value |
