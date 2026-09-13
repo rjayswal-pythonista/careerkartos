@@ -17,6 +17,8 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import Integer, String, and_, cast, desc, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from sqlalchemy import text as sa_text
+
 from ..db import SessionLocal, engine, init_db
 from ..models.schema import (
     Company, Job, OutboundClick, SavedJob, SavedSearch, ScrapeRun, User, utcnow,
@@ -428,6 +430,24 @@ def stats(db: DB):
     }
 
 
+def _search_index_present() -> bool | None:
+    """Whether the full-text index exists. None on SQLite, which does not use one.
+
+    Surfaced in /api/health because its absence is invisible from the outside —
+    search still returns correct results, just by scanning the whole table, so
+    the only symptom is that high-match queries get slower as the feed grows.
+    """
+    if not IS_POSTGRES:
+        return None
+    try:
+        with engine.connect() as conn:
+            return bool(conn.execute(sa_text(
+                "SELECT 1 FROM pg_indexes WHERE tablename='jobs' AND indexname='ix_jobs_fts'"
+            )).first())
+    except Exception:
+        return None
+
+
 @app.get("/api/health")
 def health(db: DB):
     """Operational health — surfaces connector breakage, not just process liveness."""
@@ -450,6 +470,7 @@ def health(db: DB):
         "failing_sources": [
             {"company": n, "error": (e or "")[:200], "last_attempt": t} for n, e, t in failing
         ],
+        "search_index": _search_index_present(),
     }
 
 

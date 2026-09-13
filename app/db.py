@@ -113,8 +113,15 @@ def _ensure_search_index():
     try:
         with engine.begin() as conn:
             conn.execute(ddl)
+        log.info("full-text search index present")
     except Exception as e:  # pragma: no cover - index is an optimisation
-        log.warning("could not create full-text index (search falls back to a scan): %s", e)
+        # Deliberately non-fatal: search still returns correct results without
+        # it, just by scanning. But the failure is otherwise invisible, so it is
+        # logged loudly and reported by /api/health ("search_index": false).
+        log.error(
+            "FULL-TEXT INDEX MISSING — search will scan the whole table. "
+            "Re-run init_db() once the schema is settled. Cause: %s", e
+        )
 
 
 @contextmanager
