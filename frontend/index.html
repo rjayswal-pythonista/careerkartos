@@ -7,7 +7,7 @@
 <meta name="description" content="Job listings indexed daily from employer career pages. Every role links to the company's own posting.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
    CareerKartos
@@ -36,6 +36,20 @@
   --danger:#FF6B6B;
   --radius:10px;
   --max:1340px;
+  /* One motion vocabulary. --ease-sheet is the iOS-sheet curve: fast out of the
+     gate, long settle, no overshoot. Everything that slides uses it, so panels,
+     rows and toasts feel like the same physical material. */
+  --ease-sheet:cubic-bezier(.32,.72,0,1);
+  --ease-out:cubic-bezier(.22,.61,.36,1);
+  --t-fast:120ms;
+  --t-base:200ms;
+  /* Overlays and shadows are tokens because a scrim and a drop shadow tuned for
+     a near-black ground both read as dirt on a light one. This is where most
+     "beautiful dark UIs" fall apart when someone flips the switch. */
+  --scrim:rgba(3,6,10,.66);
+  --scrim-strong:rgba(3,6,10,.72);
+  --shadow-lg:0 28px 80px rgba(0,0,0,.6);
+  --shadow-md:0 14px 40px rgba(0,0,0,.4);
 }
 :root[data-theme="light"]{
   --bg:#F4F6F9;
@@ -54,17 +68,27 @@
   --accent:#2C48D9;
   --accent-2:#7A3FE0;
   --accent-dim:#2C48D912;
+  /* Lighter, bluer scrim and a soft diffuse shadow: on a light ground the job
+     of the overlay is to recede the page, not to black it out. */
+  --scrim:rgba(18,28,42,.34);
+  --scrim-strong:rgba(18,28,42,.40);
+  --shadow-lg:0 24px 60px rgba(15,26,38,.16),0 2px 8px rgba(15,26,38,.07);
+  --shadow-md:0 10px 30px rgba(15,26,38,.13),0 1px 4px rgba(15,26,38,.06);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{
-  font-family:'Archivo',system-ui,-apple-system,sans-serif;
+  font-family:'Inter',system-ui,-apple-system,sans-serif;
   background:var(--bg);
   color:var(--ink);
   font-size:14px;
   line-height:1.5;
-  font-feature-settings:"tnum" 1;
+  /* tnum: numerals share one advance width, so ages, counts and dates align
+     down the feed instead of jittering. cv11: single-storey 'a', which keeps
+     Inter from reading as generic UI default. */
+  font-feature-settings:"tnum" 1,"cv11" 1,"ss01" 1;
   -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
   overflow-x:hidden;
 }
 a{color:inherit;text-decoration:none}
@@ -73,17 +97,26 @@ button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
 ::selection{background:var(--accent);color:#fff}
 
-/* ---------------- ambient aurora: signals "live", costs nothing ---------------- */
-.aurora{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+/* ---------------- ambient aurora ----------------
+   Atmosphere belongs to the landing state, not to the scanning state. The
+   aurora is anchored to the top of the document rather than the viewport, so
+   it colours the hero and then scrolls away; once the feed fills the screen
+   there is nothing glowing behind the rows competing with the freshness ticks.
+   Decoration that follows you down a dense list is noise, not design. */
+.aurora{position:absolute;top:0;left:0;right:0;height:760px;z-index:0;pointer-events:none;overflow:hidden}
 .aurora i{
   position:absolute;display:block;border-radius:50%;
-  filter:blur(90px);opacity:.30;
+  filter:blur(90px);opacity:.22;
   animation:drift 26s ease-in-out infinite alternate;
 }
+/* Fade the whole field out before it reaches the feed, so there is no hard
+   edge where the glow stops. */
+.aurora{mask-image:linear-gradient(to bottom,#000 45%,transparent 100%);
+        -webkit-mask-image:linear-gradient(to bottom,#000 45%,transparent 100%)}
 .aurora i:nth-child(1){width:46vw;height:46vw;left:-10vw;top:-14vw;background:var(--accent)}
 .aurora i:nth-child(2){width:38vw;height:38vw;right:-8vw;top:-6vw;background:var(--accent-2);animation-delay:-9s}
 .aurora i:nth-child(3){width:32vw;height:32vw;left:34vw;top:-18vw;background:var(--fresh);opacity:.16;animation-delay:-16s}
-:root[data-theme="light"] .aurora i{opacity:.13}
+:root[data-theme="light"] .aurora i{opacity:.10}
 @keyframes drift{to{transform:translate3d(4vw,3vw,0) scale(1.12)}}
 @media (prefers-reduced-motion:reduce){.aurora i{animation:none}}
 
@@ -125,7 +158,7 @@ button{cursor:pointer}
 /* ---------------- command palette ---------------- */
 .cmdk{
   position:fixed;inset:0;z-index:90;display:none;
-  background:rgba(3,6,10,.72);backdrop-filter:blur(5px);
+  background:var(--scrim-strong);backdrop-filter:blur(5px);
   padding:11vh 20px 20px;
 }
 .cmdk.open{display:block;animation:fade .14s ease}
@@ -133,7 +166,7 @@ button{cursor:pointer}
 .cmdk-box{
   max-width:600px;margin:0 auto;background:var(--surface);
   border:1px solid var(--line-2);border-radius:14px;overflow:hidden;
-  box-shadow:0 28px 80px rgba(0,0,0,.6);
+  box-shadow:var(--shadow-lg);
   animation:pop .17s cubic-bezier(.2,.9,.3,1.2);
 }
 @keyframes pop{from{transform:translateY(-10px) scale(.985);opacity:0}}
@@ -249,21 +282,43 @@ button{cursor:pointer}
 .feed{display:flex;flex-direction:column;gap:5px}
 .row{
   position:relative;display:grid;
-  grid-template-columns:3px minmax(0,1fr) 150px 124px 52px 26px;
+  /* tick · title+company · location · function · posted-on · age · chevron */
+  grid-template-columns:3px minmax(0,1fr) 158px 116px 68px 46px 26px;
   align-items:center;gap:14px;
   background:var(--surface);border:1px solid var(--line);
   border-radius:var(--radius);padding:9px 13px 9px 0;
   cursor:pointer;transition:transform .15s,border-color .15s,background .15s;
   overflow:hidden;
 }
-.row:hover{transform:translateX(3px);border-color:var(--line-2);background:var(--surface-2)}
-.row:hover .rgo{opacity:1;transform:translateX(0)}
+/* Hover does two things and no more: the ground lifts and the arrow slides 2px.
+   No shadow growth, no scale — at 25 rows a page, anything heavier turns
+   scanning into a light show. */
+.row:hover,.row.cursor{border-color:var(--line-2);background:var(--surface-2)}
+.row:hover .rgo,.row.cursor .rgo{opacity:1;transform:translateX(2px)}
+/* Keyboard cursor. Distinguished from hover by the accent rail so you can
+   always tell where j/k left you, even with the mouse elsewhere. */
+.row.cursor{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-dim) inset}
+/* Rows that appeared since the last visit get one slow sweep in the freshness
+   colour — the emotional payoff of "new for me", tied to the same green that
+   means fresh everywhere else. Fires once, never loops. */
+@keyframes sweep{
+  0%{background-position:130% 0}
+  100%{background-position:-30% 0}
+}
+.row.unseen{
+  background-image:linear-gradient(100deg,transparent 38%,var(--fresh-dim) 50%,transparent 62%);
+  background-size:220% 100%;background-repeat:no-repeat;
+  animation:sweep 1.5s var(--ease-out) .12s 1 both;
+}
+@media (prefers-reduced-motion:reduce){.row.unseen{animation:none}}
 .tick{width:3px;align-self:stretch;border-radius:0 3px 3px 0}
 .tick.f0{background:var(--fresh);box-shadow:0 0 13px var(--fresh)}
 .tick.f1{background:var(--recent)}
 .tick.f2{background:var(--aging)}
 .rmain{min-width:0;padding-left:11px}
-.rtitle{font-weight:650;font-size:14px;letter-spacing:-.012em;line-height:1.3;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* The title is the only bold thing in the row. Everything else steps down to
+   --ink-2 or --muted, which is what lets the eye land in one hop per row. */
+.rtitle{font-weight:600;font-size:14.5px;letter-spacing:-.014em;line-height:1.3;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .rtitle .new{
   font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--fresh);
   border:1px solid var(--fresh);border-radius:4px;padding:1px 5px;background:var(--fresh-dim);
@@ -273,13 +328,32 @@ button{cursor:pointer}
   border:1px solid var(--accent);border-radius:4px;padding:1px 5px;background:var(--accent-dim);
 }
 .rsub{color:var(--ink-2);font-size:12px;margin-top:2px;display:flex;align-items:center;gap:7px}
-.rsub .co{font-weight:600;color:var(--ink)}
+.rsub .co{font-weight:500;color:var(--ink-2)}
+.row:hover .rsub .co,.row.cursor .rsub .co{color:var(--ink)}
 .logo{
   width:17px;height:17px;border-radius:4px;flex:none;
   display:grid;place-items:center;font-size:9px;font-weight:800;
   background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;
 }
 .rcell{font-size:12.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* A remote row's location is the one cell that changes the answer to "can I
+   take this job?", so it carries the accent rather than sitting in body grey. */
+.rcell.rloc[data-remote]{color:var(--accent);font-weight:500}
+.rdate{font-variant-numeric:tabular-nums;color:var(--muted)}
+
+/* Column header. Dense tables need their columns named once; without it the
+   date and the age column read as two unexplained numbers. */
+.fhead{
+  display:grid;grid-template-columns:3px minmax(0,1fr) 158px 116px 68px 46px 26px;
+  gap:14px;padding:0 13px 7px 0;align-items:end;
+}
+.fhead span{
+  font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:700;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.fhead .h-main{padding-left:14px}
+.fhead .h-age{text-align:right}
+.fhead.hide{display:none}
 .rage{font-size:12px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
 .rage.f0{color:var(--fresh)}.rage.f1{color:var(--recent)}.rage.f2{color:var(--aging)}
 .rgo{opacity:0;transform:translateX(-4px);transition:.16s;color:var(--accent);font-size:15px;text-align:center}
@@ -298,11 +372,44 @@ button{cursor:pointer}
 .feed.grid .rcell{font-size:12px}
 .feed.grid .rage{text-align:left}
 .feed.grid .rgo{display:none}
+/* In card form there are no columns to align to, so the date reads as a
+   labelled field rather than a bare number in its own cell. */
+.feed.grid .rdate::before{content:'Posted ';color:var(--muted)}
 
 .skel{height:54px;border-radius:var(--radius);background:
   linear-gradient(90deg,var(--surface) 25%,var(--surface-2) 50%,var(--surface) 75%);
   background-size:240% 100%;animation:shim 1.25s infinite}
 @keyframes shim{to{background-position:-140% 0}}
+
+/* Skeleton rows mirror the real row's geometry exactly — same height, same
+   border, same tick gutter, same two-line left block. Loading therefore reads
+   as the content arriving rather than as the layout being rebuilt, and nothing
+   shifts when the data lands. A spinner would throw all of that away. */
+.skrow{
+  display:grid;grid-template-columns:3px minmax(0,1fr) 150px 124px 52px 26px;
+  align-items:center;gap:14px;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius);padding:9px 13px 9px 0;overflow:hidden;
+}
+.skrow i{display:block;border-radius:5px;background:var(--surface-2);position:relative;overflow:hidden}
+.skrow .sk-tick{align-self:stretch;border-radius:0 3px 3px 0;background:var(--line-2)}
+.skrow .sk-main{padding-left:11px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.skrow .sk-t{height:11px;width:var(--w,58%)}
+.skrow .sk-s{height:9px;width:34%;opacity:.7}
+.skrow .sk-c{height:9px}
+/* One shimmer sweeping across the whole list, not one per element — the list
+   reads as a single surface catching light. */
+.skrow i::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--ink) 7%,transparent),transparent);
+  transform:translateX(-100%);animation:sweepsk 1.4s ease-in-out infinite;
+}
+@keyframes sweepsk{to{transform:translateX(220%)}}
+@media (prefers-reduced-motion:reduce){
+  .skel,.skrow i::after{animation:none}
+}
+@media (max-width:1080px){.skrow{grid-template-columns:3px 1fr 110px 60px 30px}.skrow .sk-c:nth-of-type(2){display:none}}
+@media (max-width:860px){.skrow{grid-template-columns:3px minmax(0,1fr) 46px;padding:11px 12px 11px 0;gap:10px}.skrow .sk-c{display:none}}
 .state{text-align:center;padding:56px 22px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
 .state h2{font-size:17px;margin-bottom:7px;letter-spacing:-.02em}
 .state p{color:var(--ink-2);max-width:44ch;margin:0 auto 15px}
@@ -317,12 +424,13 @@ button{cursor:pointer}
 .pager button:disabled{opacity:.34;cursor:not-allowed}
 
 /* ---------------- detail panel ---------------- */
-.scrim{position:fixed;inset:0;background:rgba(3,6,10,.66);backdrop-filter:blur(3px);z-index:70;opacity:0;pointer-events:none;transition:.22s}
+.scrim{position:fixed;inset:0;background:var(--scrim);backdrop-filter:blur(3px);z-index:70;opacity:0;pointer-events:none;transition:.22s}
 .scrim.on{opacity:1;pointer-events:auto}
 .panel{
   position:fixed;top:0;right:0;bottom:0;width:min(620px,100%);z-index:80;
   background:var(--bg-2);border-left:1px solid var(--line-2);
-  transform:translateX(100%);transition:transform .28s cubic-bezier(.22,.9,.28,1);
+  box-shadow:var(--shadow-lg);
+  transform:translateX(100%);transition:transform var(--t-base) var(--ease-sheet);
   overflow-y:auto;overscroll-behavior:contain;
 }
 .panel.on{transform:none}
@@ -334,6 +442,18 @@ button{cursor:pointer}
 .pmeta{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
 .tag{border:1px solid var(--line-2);border-radius:6px;padding:3px 9px;font-size:11.5px;color:var(--ink-2)}
 .tag.f0{border-color:var(--fresh);color:var(--fresh);background:var(--fresh-dim)}
+.tag.tremote{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);font-weight:600}
+
+/* Panel facts. Location and posting date are the two fields people re-check
+   before applying, so they get a labelled row of their own rather than being
+   left to compete with department and level in the tag strip. */
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:9px;overflow:hidden;margin:14px 0 2px}
+.fact{background:var(--surface);padding:10px 13px;min-width:0}
+.fact dt{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:700;margin-bottom:3px}
+.fact dd{font-size:13px;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fact dd .sub{display:block;font-size:11.5px;color:var(--ink-2);font-weight:500;margin-top:1px}
+.fact.remote dd{color:var(--accent)}
 .pbody{padding:20px 22px 30px}
 .pbody h4{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:20px 0 9px;font-weight:700}
 .desc{white-space:pre-wrap;color:var(--ink-2);font-size:13.5px;line-height:1.68;max-height:340px;overflow:hidden;position:relative}
@@ -364,14 +484,135 @@ footer b{color:var(--ink-2)}
   position:fixed;bottom:22px;left:50%;transform:translate(-50%,14px);
   background:var(--surface);border:1px solid var(--line-2);border-radius:9px;
   padding:11px 17px;font-size:13px;z-index:95;opacity:0;pointer-events:none;transition:.2s;
-  box-shadow:0 14px 40px rgba(0,0,0,.4);font-weight:600;
+  box-shadow:var(--shadow-md);font-weight:600;
 }
 .toast.on{opacity:1;transform:translate(-50%,0)}
 
+/* ---------------- save pop ----------------
+   A single 300ms scale-pop on the star, and the toast that follows teaches the
+   keyboard shortcut. The interaction is the documentation. */
+@keyframes savepop{0%{transform:scale(1)}42%{transform:scale(1.32)}100%{transform:scale(1)}}
+.pop{animation:savepop 300ms var(--ease-out)}
+@media (prefers-reduced-motion:reduce){.pop{animation:none}}
+
+/* ---------------- verification line ----------------
+   The product claim, stated on the one screen where someone is deciding
+   whether to trust the listing. Same green as every other freshness signal. */
+.verify{
+  display:flex;align-items:center;gap:9px;margin:14px 0 2px;padding:10px 12px;
+  border:1px solid var(--fresh);background:var(--fresh-dim);border-radius:9px;
+  font-size:12.5px;color:var(--fresh);font-weight:600;
+}
+.verify .vdot{width:7px;height:7px;border-radius:50%;background:var(--fresh);flex:none;
+  box-shadow:0 0 0 4px var(--fresh-dim);animation:beat 2.6s ease-in-out infinite}
+.verify.cold{border-color:var(--line-2);background:var(--surface);color:var(--ink-2)}
+.verify.cold .vdot{background:var(--aging);box-shadow:none;animation:none}
+@media (prefers-reduced-motion:reduce){.verify .vdot{animation:none}}
+
+/* ---------------- skill chips ---------------- */
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chipk{
+  border:1px solid var(--line-2);background:var(--surface);border-radius:6px;
+  padding:4px 9px;font-size:11.5px;color:var(--ink-2);font-weight:500;
+  font-family:'JetBrains Mono',ui-monospace,monospace;letter-spacing:-.02em;
+}
+
+/* Salary gets its own line and real weight — it is the single most-wanted
+   field and burying it in a tag row wastes the one time we actually have it. */
+.salary{
+  margin:14px 0 2px;padding:11px 13px;border:1px solid var(--line-2);
+  border-radius:9px;background:var(--surface);
+}
+.salary .sv{font-size:16px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
+.salary .sl{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:700;margin-bottom:3px}
+
+/* Sticky apply bar: the destination is named, because trust is the conversion
+   lever here — people click harder when they can see they are being handed to
+   the employer and not to us. */
+.pfoot{
+  position:sticky;bottom:0;z-index:3;margin-top:22px;
+  padding:13px 22px calc(13px + env(safe-area-inset-bottom));
+  background:color-mix(in srgb,var(--bg-2) 92%,transparent);
+  backdrop-filter:blur(14px) saturate(140%);
+  border-top:1px solid var(--line);
+  display:flex;gap:9px;flex-wrap:wrap;
+}
+.pfoot .apply{flex:1;min-width:180px}
+.applysub{display:block;font-size:10.5px;font-weight:600;opacity:.82;letter-spacing:.01em;margin-top:2px}
+
+/* ---------------- shortcut overlay (?) ---------------- */
+.keys{position:fixed;inset:0;z-index:96;display:none;background:var(--scrim-strong);backdrop-filter:blur(5px);padding:12vh 20px 20px}
+.keys.open{display:block;animation:fade .14s ease}
+.keys-box{
+  max-width:520px;margin:0 auto;background:var(--surface);border:1px solid var(--line-2);
+  border-radius:14px;padding:22px 24px 24px;box-shadow:var(--shadow-lg);
+  animation:pop .17s var(--ease-out);
+}
+.keys-box h3{font-size:15px;letter-spacing:-.02em;margin-bottom:16px}
+.keys-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 26px}
+.keys-row{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink-2)}
+.keys-row .kbd{margin-left:auto}
+@media (max-width:620px){.keys-grid{grid-template-columns:1fr}}
+
+/* ---------------- live pulse (landing flourish) ----------------
+   The one place the page is allowed to be theatrical. It dramatises the single
+   claim the whole product rests on — that this feed is alive right now — using
+   data already on screen. It only ever runs on the unfiltered landing view. */
+.livewrap{
+  position:relative;z-index:1;max-width:var(--max);margin:0 auto;padding:0 22px 4px;
+}
+.live-in{
+  border:1px solid var(--line);border-radius:12px;background:var(--surface);
+  overflow:hidden;display:grid;grid-template-columns:auto 1fr;align-items:stretch;
+}
+.live-lbl{
+  display:flex;align-items:center;gap:8px;padding:0 15px;border-right:1px solid var(--line);
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.11em;font-weight:800;color:var(--fresh);
+  background:var(--fresh-dim);white-space:nowrap;
+}
+.live-lbl .vdot{width:6px;height:6px;border-radius:50%;background:var(--fresh);
+  box-shadow:0 0 0 3px var(--fresh-dim);animation:beat 2.6s ease-in-out infinite;flex:none}
+.live-track{position:relative;height:40px;overflow:hidden}
+.live-track ul{position:absolute;inset:0;margin:0;padding:0;list-style:none}
+.live-track li{
+  position:absolute;inset:0;display:flex;align-items:center;gap:10px;padding:0 15px;
+  font-size:12.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;
+  opacity:0;transform:translateY(100%);
+}
+/* Each entry rises in, holds, and leaves upward — a ticker, not a carousel.
+   Motion is vertical only, so it reads as a feed advancing. */
+.live-track li.in{opacity:1;transform:translateY(0);transition:opacity .34s var(--ease-out),transform .44s var(--ease-sheet)}
+.live-track li.out{opacity:0;transform:translateY(-100%);transition:opacity .3s var(--ease-out),transform .4s var(--ease-sheet)}
+.live-track li b{color:var(--ink);font-weight:600}
+.live-track li .lt{color:var(--fresh);font-weight:700;margin-left:auto;flex:none;font-variant-numeric:tabular-nums}
+.live-track li .logo{width:15px;height:15px;font-size:8px}
+@media (prefers-reduced-motion:reduce){
+  .live-track li.in,.live-track li.out{transition:none}
+  .live-lbl .vdot{animation:none}
+}
+@media (max-width:860px){
+  .livewrap{padding:0 18px 4px}
+  .live-lbl{font-size:9.5px;padding:0 11px;letter-spacing:.08em}
+  .live-track li .lt{display:none}
+}
+
 /* ---------------- responsive ---------------- */
-@media (max-width:1080px){
-  .row{grid-template-columns:3px 1fr 110px 60px 30px}
-  .row .rcell:nth-of-type(2){display:none}
+/* Columns drop in order of what a scanner can least afford to lose. Function
+   goes first (it is usually implied by the title), then the absolute date —
+   the relative age answers the same question in less space. Location is the
+   last to go, because for a remote role it is the deciding field. */
+/* Hidden grid items still occupy a track, so every breakpoint must hide cells
+   by explicit class AND shorten the track list to match exactly — the same
+   trap the mobile rule below already documents. Index-based selectors are not
+   safe here: .rloc, .rfn and .rdate are all .rcell, so nth-of-type shifts
+   whenever a column is added. */
+@media (max-width:1180px){
+  .row,.fhead{grid-template-columns:3px minmax(0,1fr) 150px 68px 46px 26px}
+  .row .rfn,.fhead .h-fn{display:none}
+}
+@media (max-width:1000px){
+  .row,.fhead{grid-template-columns:3px minmax(0,1fr) 140px 46px 26px}
+  .row .rfn,.row .rdate,.fhead .h-fn,.fhead .h-date{display:none}
 }
 @media (max-width:860px){
   .shell{grid-template-columns:1fr;padding:16px}
@@ -381,6 +622,8 @@ footer b{color:var(--ink-2)}
      .rgo spill into implicit columns past the viewport. */
   .row{grid-template-columns:3px minmax(0,1fr) 46px;padding:11px 12px 11px 0;gap:10px}
   .row .rcell{display:none}
+  /* The header describes columns that no longer exist at this width. */
+  .fhead{display:none}
   .rtitle{font-size:13.5px}
   .hero h1{font-size:clamp(26px,7.6vw,34px);max-width:100%}
   .hero p{font-size:14px}
@@ -405,6 +648,7 @@ footer b{color:var(--ink-2)}
     <div class="top-act">
       <button class="iconbtn" id="cmdBtn" title="Search everything (⌘K)" aria-label="Open command palette">⌕</button>
       <button class="iconbtn" id="savedBtn" title="Saved roles" aria-label="Show saved roles">☆</button>
+      <button class="iconbtn" id="keysBtn" title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">?</button>
       <button class="iconbtn" id="themeBtn" title="Toggle light / dark" aria-label="Toggle colour theme">◐</button>
     </div>
   </div>
@@ -415,6 +659,13 @@ footer b{color:var(--ink-2)}
   <p>Indexed daily from employer career pages — never reposted, never stale, never a middleman. Every listing links back to the company's own posting.</p>
   <div class="hero-stats" id="heroStats"></div>
 </section>
+
+<div class="livewrap" id="livewrap" hidden>
+  <div class="live-in">
+    <div class="live-lbl"><span class="vdot" aria-hidden="true"></span>Confirmed live</div>
+    <div class="live-track"><ul id="liveTrack" aria-live="off"></ul></div>
+  </div>
+</div>
 
 <div class="searchwrap">
   <div class="searchbar">
@@ -465,6 +716,15 @@ footer b{color:var(--ink-2)}
         </select>
       </div>
     </div>
+    <div class="fhead" id="fhead" aria-hidden="true">
+      <span></span>
+      <span class="h-main">Role</span>
+      <span class="h-loc">Location</span>
+      <span class="h-fn">Function</span>
+      <span class="h-date">Posted on</span>
+      <span class="h-age">Age</span>
+      <span></span>
+    </div>
     <div id="feed" class="feed"></div>
     <div class="pager" id="pager"></div>
   </main>
@@ -483,6 +743,26 @@ footer b{color:var(--ink-2)}
   </div>
 </div>
 
+<div class="keys" id="keys" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+  <div class="keys-box">
+    <h3>Keyboard shortcuts</h3>
+    <div class="keys-grid">
+      <div class="keys-row">Move down the feed<span class="kbd">J</span></div>
+      <div class="keys-row">Move up the feed<span class="kbd">K</span></div>
+      <div class="keys-row">Open the role<span class="kbd">↵</span></div>
+      <div class="keys-row">Save / unsave<span class="kbd">S</span></div>
+      <div class="keys-row">Apply to this role<span class="kbd">A</span></div>
+      <div class="keys-row">Focus search<span class="kbd">/</span></div>
+      <div class="keys-row">Focus filters<span class="kbd">F</span></div>
+      <div class="keys-row">Command palette<span class="kbd">⌘K</span></div>
+      <div class="keys-row">Saved roles<span class="kbd">G</span></div>
+      <div class="keys-row">Toggle theme<span class="kbd">T</span></div>
+      <div class="keys-row">Next / previous page<span class="kbd">← →</span></div>
+      <div class="keys-row">Close anything<span class="kbd">Esc</span></div>
+    </div>
+  </div>
+</div>
+
 <div class="scrim" id="scrim"></div>
 <aside class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="pTitle"></aside>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -495,11 +775,56 @@ const S = {
   facets:null, total:0, pages:1, expanded:{}, view:'list',
   saved:JSON.parse(localStorage.getItem('ck_saved')||'[]'),
   savedOnly:false, items:[],
-  token:localStorage.getItem('tok')||null
+  token:localStorage.getItem('tok')||null,
+  /* Keyboard cursor index into the rendered feed. -1 means "no cursor yet",
+     which is distinct from 0 so the first j does not skip row one. */
+  cursor:-1,
+  openId:null,
+  /* Timestamp of the previous visit, read once at boot. Rows first seen after
+     it get the one-time highlight sweep. Written back on unload, not on boot,
+     so a reload during the same session does not erase the marks. */
+  lastVisit: parseInt(localStorage.getItem('ck_seen')||'0',10) || null
 };
+
+/* Detail responses keyed by job id. Populated on row hover and on keyboard
+   cursor rest, so the panel usually has its content before it finishes
+   sliding in. A 0ms panel feels more expensive than any animation. */
+const preCache = new Map();
+const PRECACHE_MAX = 60;
+function precache(id){
+  if(!id || preCache.has(id)) return;
+  /* Reserve the slot before awaiting so two rapid hovers can't both fire. */
+  preCache.set(id, null);
+  Promise.all([
+    fetch(`${API}/jobs/${id}`).then(r=>r.ok?r.json():null),
+    fetch(`${API}/jobs/${id}/similar?limit=5`).then(r=>r.ok?r.json():[]).catch(()=>[])
+  ]).then(([j,sim])=>{
+    if(!j){ preCache.delete(id); return; }
+    preCache.set(id,{j,sim:sim||[]});
+    /* Bound the cache: a long scroll session shouldn't accumulate every
+       description the user merely swept the mouse across. */
+    if(preCache.size > PRECACHE_MAX){
+      for(const k of preCache.keys()){ if(preCache.size<=PRECACHE_MAX) break; if(k!==id) preCache.delete(k); }
+    }
+  }).catch(()=>preCache.delete(id));
+}
 
 const el = id => document.getElementById(id);
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* The API serves naive UTC timestamps ("2026-09-13T14:21:29", no zone). ES5
+   date parsing treats a bare date-time as LOCAL, so every timestamp lands
+   offset by the viewer's UTC offset: in IST a role posted this minute reads
+   "5h ago", and in Los Angeles it lands in the future. Freshness is the entire
+   product claim, so every timestamp goes through here — append Z when the
+   string carries no zone, and let anything explicitly zoned pass untouched. */
+function ts(v){
+  if(!v) return NaN;
+  if(v instanceof Date) return v.getTime();
+  const s = String(v).trim();
+  const naive = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s);
+  return new Date(naive ? s.replace(' ','T')+'Z' : s).getTime();
+}
 
 /* Age drives both the tick colour and the label — one source of truth.
    `label` is the compact feed badge; `phrase` reads correctly inside a
@@ -507,7 +832,10 @@ const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>
 function age(job){
   const t = job.posted_date || job.first_seen_at;
   if(!t) return {band:2, label:'—', phrase:'at an unknown time', hours:1e9};
-  const h = (Date.now() - new Date(t).getTime())/36e5;
+  /* Clock skew and same-second posts can make this marginally negative;
+     clamping keeps "in 0 hours" off the screen. */
+  const h = Math.max(0, (Date.now() - ts(t))/36e5);
+  if(!isFinite(h)) return {band:2, label:'—', phrase:'at an unknown time', hours:1e9};
   if(h < 1)  return {band:0, label:'now', phrase:'in the last hour', hours:h};
   if(h < 24) return {band:0, label:Math.floor(h)+'h', phrase:Math.floor(h)+' hours ago', hours:h};
   const d = Math.floor(h/24);
@@ -517,6 +845,125 @@ function age(job){
 }
 
 const firstInitial = name => (String(name||'?').trim()[0] || '?').toUpperCase();
+
+/* Where the job actually is — one resolver, used by the feed, the panel and
+   the saved list, so those three can never disagree.
+
+   The rule that matters: a remote role still has a region, and throwing it
+   away is the difference between a useful listing and an unanswerable one.
+   "Remote" alone tells a candidate in Pune nothing about whether they can take
+   the job; "Remote · US" tells them immediately. The ATS usually supplies the
+   region in location_raw ("Remote - US", "Remote - EMEA") even when the
+   structured country field is empty, so the raw string is the fallback rather
+   than being discarded.
+
+   Returns {text, scope} — scope is the short region for the pill, text is the
+   full human-readable place. */
+const REGION_WORDS = {
+  'us':'US','usa':'US','united states':'US','u.s.':'US','u.s.a.':'US','americas':'Americas','latam':'LATAM',
+  'emea':'EMEA','apac':'APAC','anz':'ANZ','uk':'UK','united kingdom':'UK','eu':'EU','europe':'Europe',
+  'india':'India','canada':'Canada','global':'Global','worldwide':'Worldwide','anywhere':'Anywhere',
+  'germany':'Germany','france':'France','australia':'Australia','singapore':'Singapore','japan':'Japan',
+  'brazil':'Brazil','mexico':'Mexico','ireland':'Ireland','netherlands':'Netherlands','spain':'Spain','poland':'Poland',
+};
+function placeOf(j){
+  const city = (j.location_city||'').trim();
+  const country = (j.location_country||'').trim();
+  const raw = (j.location_raw||'').trim();
+
+  if(!j.is_remote){
+    const text = [city, country].filter(Boolean).join(', ') || raw || '—';
+    return {text, scope:'', remote:false};
+  }
+
+  /* Prefer the structured country; otherwise recover the region from the raw
+     string by stripping the leading "Remote" and any separator after it. */
+  let scope = country;
+  if(!scope && raw){
+    const tail = raw.replace(/^\s*(fully\s+|100%\s+)?remote\b/i,'').replace(/^[\s\-–—:,()|/]+/,'').replace(/[)\s]+$/,'').trim();
+    if(tail && !/^remote$/i.test(tail)) scope = tail;
+  }
+  /* Normalise to a compact label so the pill stays one line: "United States"
+     becomes "US", "Remote - EMEA" stays "EMEA". Unrecognised values pass
+     through as the ATS wrote them rather than being dropped. */
+  const key = scope.toLowerCase().replace(/\.$/,'').trim();
+  if(REGION_WORDS[key]) scope = REGION_WORDS[key];
+
+  if(city) return {text:`Remote · ${[city, country].filter(Boolean).join(', ')}`, scope: scope||'', remote:true};
+  return {text: scope ? `Remote · ${scope}` : 'Remote', scope: scope||'', remote:true};
+}
+
+/* Absolute posting date for the "Posted on" column. The relative age already
+   lives in its own column and answers "is this fresh?"; this answers "when
+   exactly?", which is the question people ask when comparing two listings or
+   deciding whether a month-old role is worth it. Same-year dates drop the
+   year to stay narrow. */
+function postedOn(j){
+  const t = j.posted_date || j.first_seen_at;
+  const ms = ts(t);
+  if(!isFinite(ms)) return {short:'—', exact:'Posting date not published by the employer'};
+  const d = new Date(ms);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return {
+    short: d.toLocaleDateString(undefined, sameYear ? {day:'numeric',month:'short'} : {day:'numeric',month:'short',year:'numeric'}),
+    exact: d.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'}),
+  };
+}
+
+/* Salary, when the ATS gave us one. Only structured fields are trusted — we
+   never parse a number out of the description, because a wrong salary is worse
+   than no salary. */
+function salaryLine(j){
+  const num = v => { const n = Number(v); return (v==null || v==='' || !isFinite(n) || n<=0) ? null : n; };
+  const lo = num(j.salary_min ?? j.compensation_min);
+  const hi = num(j.salary_max ?? j.compensation_max);
+  if(lo == null && hi == null) return null;
+  const cur = j.salary_currency || j.currency || '';
+  /* Full digits, grouped in the viewer's locale. Compact notation is wrong
+     here: it rounds ₹35,00,000 to "₹4M", which both misstates the figure and
+     imposes western grouping on an Indian salary. A pay range is a number
+     people compare precisely — never abbreviate it. */
+  const fmt = n => {
+    try{
+      return new Intl.NumberFormat(undefined,{
+        style: cur ? 'currency' : 'decimal', currency: cur || undefined,
+        maximumFractionDigits:0
+      }).format(n);
+    }catch(e){ return (cur?cur+' ':'')+n.toLocaleString(); }
+  };
+  /* An open-ended range must read as open-ended rather than inventing the
+     missing bound as zero. */
+  if(lo != null && hi != null) return lo === hi ? fmt(lo) : `${fmt(lo)} – ${fmt(hi)}`;
+  if(lo != null) return `From ${fmt(lo)}`;
+  return `Up to ${fmt(hi)}`;
+}
+
+/* Skills surfaced as chips. Matching against a fixed vocabulary keeps this
+   honest: the panel can only ever show a skill the description actually
+   mentions, and never invents one. Word-boundary matched so "Go" doesn't fire
+   on "Google" and "R" doesn't fire on every capital R in the text. */
+const SKILL_VOCAB = ['Python','JavaScript','TypeScript','Java','Kotlin','Swift','Go','Rust','Ruby','PHP','Scala','C++','C#','SQL','R',
+  'React','Next.js','Vue','Angular','Svelte','Node.js','Django','Flask','FastAPI','Rails','Spring','.NET','GraphQL','REST',
+  'AWS','GCP','Azure','Docker','Kubernetes','Terraform','Ansible','Jenkins','CI/CD',
+  'PostgreSQL','MySQL','MongoDB','Redis','Kafka','Elasticsearch','Snowflake','Airflow','Spark','Hadoop','dbt',
+  'TensorFlow','PyTorch','LLM','NLP','Machine Learning','Data Science','Pandas','NumPy',
+  'Figma','Sketch','Tableau','Power BI','Excel','Salesforce','HubSpot','Jira',
+  'Product Management','Agile','Scrum','SEO','SEM','Kubernetes'];
+function skillsIn(text, limit=12){
+  if(!text) return [];
+  const found = [];
+  const seen = new Set();
+  for(const s of SKILL_VOCAB){
+    if(seen.has(s.toLowerCase())) continue;
+    const esc_ = s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    /* Leading/trailing guards instead of \b, because \b misfires on tokens
+       ending in punctuation like "Node.js", "C++" and ".NET". */
+    const re = new RegExp(`(^|[^A-Za-z0-9+#.])${esc_}([^A-Za-z0-9+#]|$)`,'i');
+    if(re.test(text)){ found.push(s); seen.add(s.toLowerCase()); }
+    if(found.length >= limit) break;
+  }
+  return found;
+}
 
 const toast = msg => {
   const t = el('toast'); t.textContent = msg; t.classList.add('on');
@@ -573,13 +1020,16 @@ function readUrl(){
    chip, because "3h ago" is unverifiable while a real timestamp is not. */
 function freshness(iso){
   if(!iso) return {short:'never — no scrape has completed', exact:'No successful scrape recorded yet', stale:true};
-  const d = new Date(iso);
-  if(isNaN(d)) return {short:'unknown', exact:'Unknown', stale:true};
+  const d = new Date(ts(iso));
+  if(isNaN(d.getTime())) return {short:'unknown', exact:'Unknown', stale:true};
   const exact = d.toLocaleString(undefined,{
     year:'numeric', month:'short', day:'numeric',
     hour:'2-digit', minute:'2-digit', timeZoneName:'short'
   });
   const mins = Math.max(0, Math.round((Date.now()-d.getTime())/6e4));
+  /* A future timestamp means the clock or the zone is wrong, not that the
+     data is impossibly fresh — say nothing rather than something false. */
+  if((Date.now()-d.getTime()) < -6e5) return {short:'unknown', exact, stale:true};
   let short;
   if(mins < 2)        short = 'just now';
   else if(mins < 60)  short = mins+' min ago';
@@ -592,6 +1042,9 @@ function freshness(iso){
 async function loadPulse(){
   try{
     const s = await (await fetch(API+'/stats')).json();
+    /* Fallback for the panel's verification line when a listing carries no
+       per-job confirmation timestamp: the run that last touched the feed. */
+    S.lastScrape = s.last_updated || null;
     const upd = freshness(s.last_updated);
     el('pulse').innerHTML =
       `<span><b>${(s.total_active_jobs||0).toLocaleString()}</b> open roles</span>`+
@@ -603,7 +1056,11 @@ async function loadPulse(){
       `<div class="chip"><b>${s.total_companies||0}</b> employers</div>`+
       (s.posted_last_24h ? `<div class="chip hot">● <b>${s.posted_last_24h}</b> added today</div>` : '')+
       (s.posted_last_7d ? `<div class="chip"><b>${s.posted_last_7d}</b> this week</div>` : '')+
-      `<div class="chip${upd.stale?' stale':''}" title="${esc(upd.exact)}">Collected ${esc(upd.exact)}</div>`;
+      /* The relative form is the glanceable one and the exact timestamp stays
+         in the tooltip. Spelling the full date out here pushed a 40-character
+         string into the chip row, where it out-weighed the live counts it was
+         meant to support. */
+      `<div class="chip${upd.stale?' stale':''}" title="${esc(upd.exact)}">Collected ${esc(upd.short)}</div>`;
   }catch(e){ el('pulse').textContent=''; }
 }
 
@@ -656,22 +1113,63 @@ function buildQuick(){
 }
 
 /* ---------------- feed ---------------- */
-const skeleton = () =>
-  el('feed').innerHTML = Array.from({length:8},()=>'<div class="skel"></div>').join('');
+/* Skeletons match the real row's geometry, and their title widths vary so the
+   placeholder reads as a list of different roles rather than a striped block.
+   Widths are deterministic per index, not random, so a re-render during the
+   same load doesn't reshuffle them. */
+const SK_W = [62,48,71,55,66,43,58,68];
+const skeleton = (n=8) => {
+  el('feed').className = 'feed' + (S.view==='grid'?' grid':'');
+  el('feed').innerHTML = Array.from({length:n},(_,i)=>
+    `<div class="skrow" aria-hidden="true">
+       <div class="sk-tick"></div>
+       <div class="sk-main"><i class="sk-t" style="--w:${SK_W[i%SK_W.length]}%"></i><i class="sk-s"></i></div>
+       <i class="sk-c" style="height:9px;width:70%"></i>
+       <i class="sk-c" style="height:9px;width:58%"></i>
+       <i class="sk-c" style="height:9px;width:60%"></i>
+       <i class="sk-c" style="height:9px;width:40%"></i>
+     </div>`).join('');
+};
 
+let loadSeq = 0;
 async function load(){
-  skeleton();
   syncUrl();
   if(S.savedOnly){ renderSaved(); return; }
+
+  const seq = ++loadSeq;
+  /* Optimistic: the rows already on screen stay put and merely recede while the
+     new page is in flight. Replacing them with skeletons on every keystroke
+     would make a fast connection look busier than a slow one. Skeletons are for
+     the cold start, when there is genuinely nothing to keep. */
+  const feed = el('feed');
+  const hasRows = !!feed.querySelector('.row');
+  if(hasRows){
+    feed.style.transition = 'opacity 140ms var(--ease-out)';
+    feed.style.opacity = '.45';
+    feed.style.pointerEvents = 'none';
+  }else{
+    skeleton();
+  }
+  const restore = ()=>{ feed.style.opacity=''; feed.style.pointerEvents=''; };
+
   let d;
   try{ d = await (await fetch(API+'/jobs?'+qs())).json(); }
   catch(e){
+    if(seq !== loadSeq) return;
+    restore();
+    el('fhead').classList.add('hide');
     el('feed').innerHTML = `<div class="state"><h2>Couldn't reach the feed</h2>
       <p>The API didn't respond. It may be waking up — give it a moment and try again.</p>
       <button onclick="load()">Retry</button></div>`;
     el('pager').innerHTML=''; return;
   }
+  /* A slower earlier request must never overwrite a newer one's results —
+     without this, fast typing can end on the wrong page of results. */
+  if(seq !== loadSeq) return;
+  restore();
   S.total = d.total; S.pages = d.pages; S.items = d.items||[];
+  /* Theatre only on the landing view: unfiltered, first page, newest-first. */
+  if(!activeCount() && S.page===1 && S.sort==='newest') startLive(S.items); else stopLive();
   if(d.total === 0) track('search_no_results', {query:S.q||null, filters:activeCount()});
   const n = activeCount();
   el('count').innerHTML = `<b>${d.total.toLocaleString()}</b> role${d.total===1?'':'s'}`+
@@ -687,6 +1185,8 @@ function activeCount(){
 }
 function renderFeed(items){
   el('feed').className = 'feed' + (S.view==='grid'?' grid':'');
+  /* The header labels list columns; cards and the empty state have none. */
+  el('fhead').classList.toggle('hide', S.view==='grid' || !items.length);
   if(!items.length){
     el('feed').innerHTML = `<div class="state"><h2>No roles match this combination</h2>
       <p>Try widening the date range or removing a filter — the feed refreshes every day, so it's worth checking back.</p>
@@ -695,27 +1195,68 @@ function renderFeed(items){
   }
   el('feed').innerHTML = items.map(j=>{
     const a = age(j);
-    const loc = j.is_remote && !j.location_city ? 'Remote'
-      : [j.location_city, j.location_country].filter(Boolean).join(', ') || (j.location_raw||'—');
-    return `<div class="row" data-id="${j.id}" tabindex="0" role="button" aria-label="${esc(j.normalized_title||j.title)} at ${esc(j.company)}">
+    const place = placeOf(j);
+    const on = postedOn(j);
+    /* "Unseen" is relative to the visitor's last session, not to absolute age:
+       a three-day-old role they have never been shown is new to them. */
+    const seenAt = j.first_seen_at ? ts(j.first_seen_at) : 0;
+    const unseen = S.lastVisit && isFinite(seenAt) && seenAt > S.lastVisit;
+    return `<div class="row${unseen?' unseen':''}" data-id="${j.id}" tabindex="0" role="button" aria-label="${esc(j.normalized_title||j.title)} at ${esc(j.company)}">
       <div class="tick f${a.band}"></div>
       <div class="rmain">
         <div class="rtitle">${esc(j.normalized_title||j.title)}
           ${a.hours<24?'<span class="new">NEW</span>':''}
-          ${j.is_remote?'<span class="remote">REMOTE</span>':''}</div>
-        <div class="rsub"><span class="logo" aria-hidden="true">${esc(firstInitial(j.company))}</span><span class="co">${esc(j.company)}</span><span class="msub">· ${esc(loc)}</span></div>
+          ${place.remote?`<span class="remote">REMOTE${place.scope?' · '+esc(place.scope.toUpperCase()):''}</span>`:''}</div>
+        <div class="rsub"><span class="logo" aria-hidden="true">${esc(firstInitial(j.company))}</span><span class="co">${esc(j.company)}</span><span class="msub">· ${esc(place.text)}</span></div>
       </div>
-      <div class="rcell">${esc(loc)}</div>
-      <div class="rcell">${esc(j.department||'')}</div>
-      <div class="rage f${a.band}">${a.label}</div>
+      <div class="rcell rloc"${place.remote?' data-remote="1"':''}>${esc(place.text)}</div>
+      <div class="rcell rfn">${esc(j.department||'')}</div>
+      <div class="rcell rdate" title="${esc(on.exact)}">${esc(on.short)}</div>
+      <div class="rage f${a.band}" title="Posted ${esc(a.phrase)}">${a.label}</div>
       <div class="rgo" aria-hidden="true">→</div>
     </div>`;
   }).join('');
-  el('feed').querySelectorAll('.row').forEach(r=>{
+  S.cursor = -1;
+  el('feed').querySelectorAll('.row').forEach((r,i)=>{
     const open = ()=>openJob(r.dataset.id);
     r.onclick = open;
     r.onkeydown = e => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } };
+    /* Hover is the strongest available signal of intent-to-open, so it is
+       where the detail fetch belongs. A short delay keeps a mouse travelling
+       across the list from firing a request per row it passes over. */
+    let hv;
+    r.onmouseenter = ()=>{ hv = setTimeout(()=>precache(r.dataset.id), 90); S.cursor = i; paintCursor(false); };
+    r.onmouseleave = ()=>clearTimeout(hv);
+    r.onfocus = ()=>{ S.cursor = i; paintCursor(false); };
   });
+}
+
+/* Cursor paint is separated from cursor movement so hover can adopt the cursor
+   without yanking the viewport, while j/k scrolls the row into view. */
+function paintCursor(scroll=true){
+  const rows = [...el('feed').querySelectorAll('.row')];
+  rows.forEach((r,i)=>r.classList.toggle('cursor', i===S.cursor));
+  const cur = rows[S.cursor];
+  if(cur && scroll) cur.scrollIntoView({block:'nearest',behavior:'smooth'});
+  return cur;
+}
+function moveCursor(delta){
+  const rows = [...el('feed').querySelectorAll('.row')];
+  if(!rows.length) return;
+  S.cursor = S.cursor < 0
+    ? (delta > 0 ? 0 : rows.length-1)
+    : Math.min(rows.length-1, Math.max(0, S.cursor + delta));
+  const cur = paintCursor();
+  /* Resting on a row is as good a signal as hovering it. */
+  if(cur) precache(cur.dataset.id);
+}
+function cursorJob(){
+  const rows = [...el('feed').querySelectorAll('.row')];
+  const r = rows[S.cursor];
+  if(!r) return null;
+  const id = r.dataset.id;
+  const src = S.savedOnly ? S.saved : S.items;
+  return src.find(x=>String(x.id)===String(id)) || null;
 }
 function renderPager(){
   if(S.pages<=1){ el('pager').innerHTML=''; return; }
@@ -750,16 +1291,23 @@ function toggleSave(job){
       is_remote:job.is_remote, location_city:job.location_city,
       location_country:job.location_country, location_raw:job.location_raw,
       department:job.department});
-    toast('Saved');
+    /* Teach the shortcut through the interaction that just happened, once.
+       A user who already knows it doesn't need telling again. */
+    if(localStorage.getItem('ck_taught_s')){ toast('Saved'); }
+    else { toast('Saved — press S on any row to save it'); localStorage.setItem('ck_taught_s','1'); }
   }
   localStorage.setItem('ck_saved', JSON.stringify(S.saved));
   refreshSavedBtn();
 }
 function renderSaved(){
+  stopLive();
   el('count').innerHTML = `<b>${S.saved.length}</b> saved role${S.saved.length===1?'':'s'}`;
   el('pager').innerHTML = '';
   if(!S.saved.length){
     el('feed').className='feed';
+    /* This path returns without going through renderFeed, so the column header
+       has to be dismissed here too or it labels an empty state. */
+    el('fhead').classList.add('hide');
     el('feed').innerHTML = `<div class="state"><h2>Nothing saved yet</h2>
       <p>Open any role and hit Save to keep it here. Saved roles live in this browser — no account needed.</p>
       <button onclick="exitSaved()">Back to all roles</button></div>`;
@@ -771,45 +1319,98 @@ function exitSaved(){ S.savedOnly=false; refreshSavedBtn(); load(); }
 
 /* ---------------- detail panel ---------------- */
 async function openJob(id){
+  S.openId = id;
   el('scrim').classList.add('on');
   el('panel').classList.add('on');
-  el('panel').innerHTML = '<div class="pbody"><div class="skel" style="height:26px;margin-bottom:11px"></div><div class="skel" style="height:150px"></div></div>';
   document.body.style.overflow='hidden';
-  let j, sim=[];
-  try{
-    [j, sim] = await Promise.all([
-      fetch(`${API}/jobs/${id}`).then(r=>r.json()),
-      fetch(`${API}/jobs/${id}/similar?limit=5`).then(r=>r.json()).catch(()=>[])
-    ]);
-  }catch(e){
-    el('panel').innerHTML = '<div class="pbody"><h2>Couldn\'t load this role</h2><p style="color:var(--ink-2);margin-top:8px">Close this panel and try again.</p></div>';
-    return;
+
+  /* If the row was hovered or rested on, the content is already here and the
+     panel paints in the same frame it opens — no skeleton, no flash. */
+  const hit = preCache.get(id);
+  let j, sim = [];
+  if(hit){
+    j = hit.j; sim = hit.sim;
+  }else{
+    el('panel').innerHTML = `<div class="phead">
+        <div class="skrow" style="border:0;background:none;padding:0;grid-template-columns:1fr">
+          <div class="sk-main" style="padding:0"><i class="sk-s" style="width:22%"></i><i class="sk-t" style="--w:74%;height:18px"></i></div>
+        </div>
+      </div>
+      <div class="pbody"><div class="skrow" style="border:0;background:none;padding:0;grid-template-columns:1fr">
+        <div class="sk-main" style="padding:0;gap:9px">
+          <i style="height:38px;border-radius:9px"></i>
+          <i class="sk-t" style="--w:100%"></i><i class="sk-t" style="--w:94%"></i>
+          <i class="sk-t" style="--w:97%"></i><i class="sk-t" style="--w:62%"></i>
+        </div></div></div>`;
+    try{
+      [j, sim] = await Promise.all([
+        fetch(`${API}/jobs/${id}`).then(r=>r.json()),
+        fetch(`${API}/jobs/${id}/similar?limit=5`).then(r=>r.json()).catch(()=>[])
+      ]);
+      preCache.set(id,{j,sim:sim||[]});
+    }catch(e){
+      el('panel').innerHTML = '<div class="pbody"><h2>Couldn\'t load this role</h2><p style="color:var(--ink-2);margin-top:8px">Close this panel and try again.</p></div>';
+      return;
+    }
   }
+  /* A slower fetch for a panel the user already closed must not paint over
+     whatever they opened next. */
+  if(S.openId !== id) return;
+  sim = sim || [];
   const a = age(j);
-  const loc = j.is_remote && !j.location_city ? 'Remote'
-    : [j.location_city, j.location_country].filter(Boolean).join(', ') || (j.location_raw||'—');
+  const place = placeOf(j);
+  const on = postedOn(j);
   const desc = j.description_raw || j.description_summary || '';
   const longDesc = desc.length > 1100;
   const saved = isSaved(j.id);
+  const pay = salaryLine(j);
+  const skills = skillsIn(desc);
+
+  /* The verification line states the product claim on the one screen where
+     someone is deciding whether to believe a listing. It reports when we last
+     confirmed the role on the employer's own board, and it degrades honestly:
+     if the confirmation is old, it says so in grey instead of claiming green. */
+  const conf = freshness(j.last_seen_at || j.updated_at || S.lastScrape);
+  const verifyHtml = conf.short === 'unknown'
+    ? ''
+    : `<div class="verify${conf.stale?' cold':''}" title="${esc(conf.exact)}">
+         <span class="vdot" aria-hidden="true"></span>
+         <span>${conf.stale
+           ? `Last confirmed on ${esc(j.company)}'s board ${esc(conf.short)}`
+           : `Confirmed live on ${esc(j.company)}'s own board ${esc(conf.short)}`}</span>
+       </div>`;
+
+  /* Naming the destination is a trust lever: people click harder when they can
+     see they are being handed to the employer's ATS and not to us. */
+  let applyHost = 'Opens the employer’s posting';
+  try{ if(j.apply_url||j.url) applyHost = 'Opens ' + new URL(j.apply_url||j.url).hostname.replace(/^www\./,''); }catch(e){}
   el('panel').innerHTML = `
     <div class="phead">
       <button class="pclose" id="pclose" aria-label="Close">✕</button>
       <div class="pco"><span class="logo" aria-hidden="true">${esc(firstInitial(j.company))}</span><span>${esc(j.company)}</span></div>
       <h2 id="pTitle">${esc(j.normalized_title||j.title)}</h2>
       <div class="pmeta">
-        <span class="tag f${a.band}">Posted ${a.phrase}</span>
-        <span class="tag">${esc(loc)}</span>
+        <span class="tag f${a.band}" title="${esc(on.exact)}">Posted ${a.phrase}</span>
+        <span class="tag${place.remote?' tremote':''}">${place.remote?'◉ ':'📍 '}${esc(place.text)}</span>
         ${j.department?`<span class="tag">${esc(j.department)}</span>`:''}
         ${j.seniority_level?`<span class="tag">${esc(j.seniority_level)}</span>`:''}
-        ${j.is_remote && loc!=='Remote'?'<span class="tag">Remote</span>':''}
       </div>
     </div>
     <div class="pbody">
-      <div class="pacts">
-        <a class="apply" id="applyBtn" href="${API}/jobs/${j.id}/apply" target="_blank" rel="noopener">Apply on ${esc(j.company)}'s site →</a>
-        <button class="ghost${saved?' saved':''}" id="saveBtn">${saved?'★ Saved':'☆ Save'}</button>
-        <button class="ghost" id="shareBtn">⇗ Share</button>
-      </div>
+      ${verifyHtml}
+      <dl class="facts">
+        <div class="fact${place.remote?' remote':''}">
+          <dt>Location</dt>
+          <dd>${place.remote?'◉ ':''}${esc(place.text)}${place.remote&&!place.scope?'<span class="sub">Region not stated by the employer</span>':''}</dd>
+        </div>
+        <div class="fact">
+          <dt>Posted on</dt>
+          <dd title="${esc(on.exact)}">${esc(on.short)}<span class="sub">${esc(a.phrase.charAt(0).toUpperCase()+a.phrase.slice(1))}</span></dd>
+        </div>
+        ${j.department?`<div class="fact"><dt>Category</dt><dd>${esc(j.department)}${j.seniority_level?`<span class="sub">${esc(j.seniority_level)} level</span>`:''}</dd></div>`:''}
+      </dl>
+      ${pay?`<div class="salary"><div class="sl">Compensation — disclosed by the employer</div><div class="sv">${esc(pay)}</div></div>`:''}
+      ${skills.length?`<h4>Skills mentioned</h4><div class="chips">${skills.map(s=>`<span class="chipk">${esc(s)}</span>`).join('')}</div>`:''}
       ${desc?`<h4>About this role</h4>
         <div class="desc${longDesc?' clip':''}" id="desc">${esc(desc)}</div>
         ${longDesc?'<button class="expand" id="expand">Read the full description ↓</button>':''}`:''}
@@ -820,6 +1421,13 @@ async function openJob(id){
         </div>`).join('')}</div>`:''}
       <h4>Where this came from</h4>
       <p style="color:var(--ink-2);font-size:13px">Indexed from ${esc(j.company)}'s own career page. Applying takes you to their site — we don't collect applications or act as a recruiter.</p>
+    </div>
+    <div class="pfoot">
+      <a class="apply" id="applyBtn" href="${API}/jobs/${j.id}/apply" target="_blank" rel="noopener">
+        Apply on ${esc(j.company)}'s site →<span class="applysub">${esc(applyHost)}</span>
+      </a>
+      <button class="ghost${saved?' saved':''}" id="saveBtn" title="Save (S)">${saved?'★ Saved':'☆ Save'}</button>
+      <button class="ghost" id="shareBtn" title="Copy link">⇗ Share</button>
     </div>`;
 
   track('job_viewed', {
@@ -840,8 +1448,12 @@ async function openJob(id){
   el('saveBtn').onclick = ()=>{
     toggleSave(j);
     const s = isSaved(j.id);
-    el('saveBtn').className = 'ghost'+(s?' saved':'');
-    el('saveBtn').textContent = s?'★ Saved':'☆ Save';
+    const b = el('saveBtn');
+    b.className = 'ghost'+(s?' saved':'');
+    b.textContent = s?'★ Saved':'☆ Save';
+    /* Restart the animation rather than relying on class toggling, which does
+       nothing when the class is already present from a previous save. */
+    b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
   };
   el('shareBtn').onclick = async ()=>{
     const url = location.origin+location.pathname+'?job='+j.id;
@@ -860,9 +1472,61 @@ async function openJob(id){
   el('panel').scrollTop = 0;
 }
 function closePanel(){
+  S.openId = null;
   el('scrim').classList.remove('on');
   el('panel').classList.remove('on');
   document.body.style.overflow='';
+  /* Hand focus back to the row the panel came from, so keyboard triage
+     continues from where it left off instead of jumping to the document top. */
+  const row = [...el('feed').querySelectorAll('.row')][S.cursor];
+  if(row) row.focus({preventScroll:true});
+}
+
+/* ---------------- shortcut overlay ---------------- */
+function openKeys(){ el('keys').classList.add('open'); track('shortcuts_opened',{}); }
+function closeKeys(){ el('keys').classList.remove('open'); }
+
+/* ---------------- live pulse ----------------
+   The landing flourish. It cycles the newest roles as a vertical ticker, which
+   dramatises the one claim the product rests on — this feed is alive right now
+   — using rows already fetched, so it costs no extra request. It shows only on
+   the unfiltered landing view: once someone is filtering, they are working, and
+   theatre becomes an obstacle. */
+let liveTimer = null, liveIdx = 0;
+function stopLive(){
+  if(liveTimer){ clearInterval(liveTimer); liveTimer = null; }
+  el('livewrap').hidden = true;
+}
+function startLive(items){
+  stopLive();
+  const reduce = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const pool = (items||[]).filter(j=>j.company).slice(0,10);
+  if(pool.length < 3) return;
+
+  el('livewrap').hidden = false;
+  const track = el('liveTrack');
+  track.innerHTML = pool.map(j=>{
+    const a = age(j);
+    return `<li><span class="logo" aria-hidden="true">${esc(firstInitial(j.company))}</span>`+
+      `<b>${esc(j.normalized_title||j.title)}</b><span>· ${esc(j.company)}</span>`+
+      `<span class="lt">${esc(a.label==='now'?'just now':a.label+' ago')}</span></li>`;
+  }).join('');
+
+  const lis = [...track.children];
+  liveIdx = 0;
+  lis[0].classList.add('in');
+  if(reduce) return;   // show the first entry, don't cycle
+
+  liveTimer = setInterval(()=>{
+    const cur = lis[liveIdx];
+    liveIdx = (liveIdx + 1) % lis.length;
+    const next = lis[liveIdx];
+    cur.classList.remove('in'); cur.classList.add('out');
+    /* Park the outgoing entry back below the track once its exit finishes, so
+       it is ready to rise again on the next lap. */
+    setTimeout(()=>cur.classList.remove('out'), 420);
+    next.classList.remove('out'); next.classList.add('in');
+  }, 2600);
 }
 
 /* ---------------- command palette ---------------- */
@@ -991,11 +1655,18 @@ function wire(){
     S.savedOnly ? renderSaved() : load();
   };
 
+  el('keysBtn').onclick = openKeys;
+  el('keys').onclick = e => { if(e.target===el('keys')) closeKeys(); };
+
   document.addEventListener('keydown', e=>{
-    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)
+                || document.activeElement.isContentEditable;
+
     if(e.key==='Escape'){
+      if(el('keys').classList.contains('open')) return closeKeys();
       if(el('cmdk').classList.contains('open')) return closeCmd();
       if(el('panel').classList.contains('on')) return closePanel();
+      if(typing){ document.activeElement.blur(); return; }
     }
     if(el('cmdk').classList.contains('open')){
       if(e.key==='ArrowDown'){ e.preventDefault(); moveCmd(1); }
@@ -1003,9 +1674,70 @@ function wire(){
       if(e.key==='Enter'){ e.preventDefault(); cmdRows[cmdSel]?.run(); closeCmd(); }
       return;
     }
+    /* ⌘K is the one binding that must survive while typing. */
     if((e.key==='k'||e.key==='K') && (e.metaKey||e.ctrlKey)){ e.preventDefault(); openCmd(); return; }
-    if(typing) return;
-    if(e.key==='/'){ e.preventDefault(); el('q').focus(); }
+    if(typing || e.metaKey || e.ctrlKey || e.altKey) return;
+    if(el('keys').classList.contains('open')) return;
+
+    /* With the panel open the keys act on the open role, not on the feed, so
+       S and A stay meaningful without the user having to close it first. */
+    const panelOpen = el('panel').classList.contains('on');
+    if(panelOpen){
+      if(e.key==='s'||e.key==='S'){ e.preventDefault(); el('saveBtn')?.click(); return; }
+      if(e.key==='a'||e.key==='A'){ e.preventDefault(); el('applyBtn')?.click(); el('applyBtn')?.focus(); return; }
+      if(e.key==='j'||e.key==='J'||e.key==='k'||e.key==='K'){
+        /* Step through the feed underneath and swap the panel's contents, so a
+           list can be triaged without closing and reopening. */
+        e.preventDefault(); moveCursor((e.key==='j'||e.key==='J')?1:-1);
+        const job = cursorJob(); if(job) openJob(job.id); return;
+      }
+      return;
+    }
+
+    switch(e.key){
+      case '/': e.preventDefault(); el('q').focus(); el('q').select(); break;
+      case '?': e.preventDefault(); openKeys(); break;
+      case 'j': case 'J': e.preventDefault(); moveCursor(1); break;
+      case 'k': case 'K': e.preventDefault(); moveCursor(-1); break;
+      case 'Enter': {
+        const job = cursorJob();
+        if(job){ e.preventDefault(); openJob(job.id); }
+        break;
+      }
+      case 's': case 'S': {
+        const job = cursorJob();
+        if(job){
+          e.preventDefault(); toggleSave(job);
+          const row = [...el('feed').querySelectorAll('.row')][S.cursor];
+          if(row){ row.classList.remove('pop'); void row.offsetWidth; row.classList.add('pop'); }
+        }
+        break;
+      }
+      case 'a': case 'A': {
+        const job = cursorJob();
+        if(job){
+          e.preventDefault();
+          track('apply_clicked', {job_id:job.id, company:job.company, source:'keyboard'});
+          window.open(`${API}/jobs/${job.id}/apply`,'_blank','noopener');
+        }
+        break;
+      }
+      case 'f': case 'F':
+        e.preventDefault();
+        /* Focus the first real control in the rail rather than the container,
+           so the next Tab continues through the filters naturally. */
+        el('freshSeg').querySelector('button')?.focus();
+        document.querySelector('.rail')?.scrollIntoView({block:'nearest',behavior:'smooth'});
+        break;
+      case 'g': case 'G': e.preventDefault(); el('savedBtn').click(); break;
+      case 't': case 'T': e.preventDefault(); el('themeBtn').click(); break;
+      case 'ArrowRight':
+        if(S.page < S.pages){ e.preventDefault(); S.page++; load(); window.scrollTo({top:0,behavior:'smooth'}); }
+        break;
+      case 'ArrowLeft':
+        if(S.page > 1){ e.preventDefault(); S.page--; load(); window.scrollTo({top:0,behavior:'smooth'}); }
+        break;
+    }
   });
 }
 
@@ -1098,6 +1830,10 @@ async function boot(){
   [...el('view').children].forEach(x=>x.classList.toggle('on', x.dataset.v===S.view));
   refreshSavedBtn();
   wire();
+  /* Stamp the visit on the way out rather than at boot, so a reload mid-session
+     doesn't clear the "new since you were last here" marks the user is still
+     looking at. pagehide fires on mobile back/forward where unload does not. */
+  addEventListener('pagehide', ()=>{ try{ localStorage.setItem('ck_seen', String(Date.now())); }catch(e){} });
   loadPulse();
   /* Read ?job= before load(): load() calls syncUrl(), which rewrites the query
      string from state and would drop the parameter before we could use it. */
