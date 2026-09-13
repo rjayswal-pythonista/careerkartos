@@ -19,7 +19,7 @@ from app.db import SessionLocal, init_db
 from app.models.schema import utcnow
 from app.pipeline.normalize import LLMNormalizer
 from app.models.schema import Company
-from app.pipeline.orchestrator import Orchestrator, purge_stale
+from app.pipeline.orchestrator import Orchestrator, purge_stale, reap_orphaned_runs
 from scripts.seed import seed_registry
 
 logging.basicConfig(
@@ -64,6 +64,14 @@ def main() -> int:
     # raw_payload into a small Postgres instance is what exhausted it. Override
     # with SCRAPE_CONCURRENCY once the database is on a larger plan.
     concurrency = int(os.environ.get("SCRAPE_CONCURRENCY", "2"))
+    # Reconcile rows left 'running' by a process that was killed mid-run. Left
+    # alone they accumulate, misreport the system as permanently busy, and skew
+    # the anomaly check that compares against recent successful runs.
+    with SessionLocal() as s:
+        reaped = reap_orphaned_runs(s)
+    if reaped:
+        log.warning("reaped %d abandoned run(s) from a previous process", reaped)
+
     orch = Orchestrator(SessionLocal, llm=LLMNormalizer(), concurrency=concurrency)
     orch.on_alert(send_alert)
 

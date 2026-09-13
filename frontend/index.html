@@ -97,8 +97,11 @@ button{cursor:pointer}
 .top-in{max-width:var(--max);margin:0 auto;padding:11px 22px;display:flex;align-items:center;gap:20px}
 .wordmark{
   font-weight:800;font-size:17px;letter-spacing:-.035em;white-space:nowrap;
-  display:flex;align-items:center;gap:8px;
+  display:flex;align-items:center;
 }
+/* Gap on the dot only. A flex `gap` on .wordmark also separates "Career" from
+   the gradient <span>, rendering the name as "Career Kartos". */
+.wordmark .dot{margin-right:8px}
 .wordmark .dot{
   width:8px;height:8px;border-radius:50%;background:var(--fresh);
   box-shadow:0 0 0 4px var(--fresh-dim);

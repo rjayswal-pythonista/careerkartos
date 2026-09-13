@@ -323,6 +323,29 @@ class Orchestrator:
             )
 
 
+def reap_orphaned_runs(session, older_than_minutes: int = 90) -> int:
+    """Mark long-abandoned 'running' rows as failed.
+
+    A run is set to 'running' before work starts and updated when it finishes.
+    If the process dies in between — OOM, deploy restart, platform timeout —
+    nothing ever reconciles the row, so it stays 'running' forever. Those
+    records then misreport the system as busy in /api/health and skew the
+    anomaly detection, which compares against recent successful runs.
+
+    Anything still 'running' well past a plausible duration was not survived by
+    its process, so it is recorded as failed rather than left ambiguous.
+    """
+    cutoff = utcnow() - timedelta(minutes=older_than_minutes)
+    result = session.execute(
+        update(ScrapeRun)
+        .where(ScrapeRun.status == "running", ScrapeRun.started_at < cutoff)
+        .values(status="failed", finished_at=utcnow(),
+                error_message="abandoned — process did not finish")
+    )
+    session.commit()
+    return result.rowcount or 0
+
+
 def purge_stale(session: Session, days: int = 60) -> int:
     """Expire listings we haven't seen in N days, even if a connector has been
     silently failing. Belt-and-braces against showing stale roles."""
