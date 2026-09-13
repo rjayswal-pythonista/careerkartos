@@ -49,15 +49,20 @@ def send_alert(severity: str, message: str, context: dict):
 def main() -> int:
     init_db()
 
-    # Seed the registry if it is empty. The scrape is driven entirely by the
-    # company table, so on a fresh database this would otherwise attempt zero
-    # sources and report a clean run — the most misleading possible outcome.
-    # seed_registry() skips companies that already exist, so this is a no-op
-    # on every subsequent run.
+    # Sync the registry on every run, not only when it is empty.
+    #
+    # seed_registry() inserts only companies whose slug is absent, so running it
+    # unconditionally is already idempotent. Gating it on an empty table meant a
+    # database that already held companies never picked up newly added ones:
+    # the registry grew from 28 to 73 in the repository while production stayed
+    # at 28 indefinitely, with the scrape reporting a clean run every time.
     with SessionLocal() as s:
-        if not s.query(Company).first():
-            log.info("registry empty — seeding before first scrape")
-            seed_registry()
+        before = s.query(Company).count()
+    seed_registry()
+    with SessionLocal() as s:
+        after = s.query(Company).count()
+    if after != before:
+        log.info("registry synced: %d -> %d companies", before, after)
 
     # Concurrency is deliberately low. The bottleneck is the database, not the
     # remote APIs: four parallel writers streaming full descriptions and

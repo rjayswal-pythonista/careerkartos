@@ -127,6 +127,9 @@ def main():
         )
         check("failure logged to scrape_runs", failed >= 1, True)
 
+    print("\n--- Registry sync ---")
+    check_registry_sync_adds_new_companies(check)
+
     print("\n--- Normalization spot check ---")
     with SessionLocal() as s:
         rows = s.execute(
@@ -151,6 +154,39 @@ def main():
     print(f"{'='*60}")
     return 0 if all(results) else 1
 
+
+
+def check_registry_sync_adds_new_companies(check):
+    """A registry that grows must reach a database that already has rows.
+
+    seed_registry() only inserts absent slugs, so it is safe to run every time.
+    It was previously gated on an empty table, which meant production stayed at
+    its original company count forever while the repository registry grew —
+    and every scrape still reported success.
+    """
+    from app.models.schema import Company
+    import scripts.seed as seed
+
+    original = seed.REGISTRY
+    try:
+        seed.REGISTRY = original[:2]
+        seed.seed_registry()
+        with SessionLocal() as s:
+            first = s.query(Company).count()
+
+        seed.REGISTRY = original[:5]
+        seed.seed_registry()
+        with SessionLocal() as s:
+            second = s.query(Company).count()
+
+        check("registry sync picks up newly added companies", second, first + 3)
+
+        seed.seed_registry()
+        with SessionLocal() as s:
+            third = s.query(Company).count()
+        check("registry sync is idempotent", third, second)
+    finally:
+        seed.REGISTRY = original
 
 if __name__ == "__main__":
     sys.exit(main())
