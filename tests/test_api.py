@@ -15,6 +15,11 @@ os.environ["DATABASE_URL"] = f"sqlite:///{DB_PATH}"
 if DB_PATH.exists():
     DB_PATH.unlink()
 
+# The suite issues a few hundred requests from one client address, which would
+# trip the per-IP limiter partway through and fail unrelated checks. The limiter
+# gets its own test below, with the ceiling set deliberately.
+os.environ["RATE_LIMIT_PER_MIN"] = "0"
+
 from fastapi.testclient import TestClient  # noqa: E402
 
 import scripts.seed as seeder  # noqa: E402
@@ -243,6 +248,49 @@ def main():
     check("no submit endpoint exists",
           client.post(f"/api/jobs/{jid}/submit-application", headers=H).status_code == 405
           or client.post(f"/api/jobs/{jid}/submit-application", headers=H).status_code == 404)
+
+    print("\n--- Caching and rate limiting ---")
+    pub = client.get("/api/jobs?per_page=5")
+    check("public feed is edge-cacheable",
+          "s-maxage" in pub.headers.get("cache-control", ""),
+          pub.headers.get("cache-control"))
+    check("cacheable response varies on Authorization",
+          "Authorization" in pub.headers.get("vary", ""),
+          pub.headers.get("vary"))
+
+    # A CDN that cached this and served it to the next visitor would hand one
+    # user's saved jobs to another.
+    me = client.get("/api/me/saved-jobs", headers=H)
+    check("authenticated response is not cacheable",
+          "no-store" in me.headers.get("cache-control", ""),
+          me.headers.get("cache-control"))
+    authed_feed = client.get("/api/jobs?per_page=5", headers=H)
+    check("same public URL is private once authenticated",
+          "no-store" in authed_feed.headers.get("cache-control", ""),
+          authed_feed.headers.get("cache-control"))
+
+    # The apply redirect records a click, so it must always reach the origin.
+    ap = client.get(f"/api/jobs/{jid}/apply", follow_redirects=False)
+    check("apply redirect is never cached",
+          "no-store" in ap.headers.get("cache-control", ""),
+          ap.headers.get("cache-control"))
+
+    import app.api.main as apimain
+    original_limit, apimain._RATE_LIMIT = apimain._RATE_LIMIT, 5
+    apimain._hits.clear()
+    try:
+        codes = [client.get("/api/stats").status_code for _ in range(8)]
+        check("limiter returns 429 past the ceiling", 429 in codes, f"{codes}")
+        check("requests under the ceiling still pass", codes[0] == 200)
+        limited = client.get("/api/stats")
+        check("429 carries Retry-After", limited.headers.get("retry-after") is not None)
+        # Uptime monitors poll health continuously by design.
+        apimain._hits.clear()
+        health = [client.get("/api/health").status_code for _ in range(8)]
+        check("health check is exempt from limiting", set(health) == {200}, f"{set(health)}")
+    finally:
+        apimain._RATE_LIMIT = original_limit
+        apimain._hits.clear()
 
     print(f"\n{'='*62}")
     print(f"  {sum(results)}/{len(results)} API checks passed")

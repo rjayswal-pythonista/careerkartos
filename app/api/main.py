@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import time
 import warnings
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -12,7 +13,8 @@ from typing import Annotated, Optional
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import Integer, String, and_, cast, desc, func, or_, select
@@ -87,6 +89,83 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Job descriptions are long and highly compressible.
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+
+# Responses safe to serve from a shared cache. The feed changes once a day, so
+# the origin should not be answering the same query thousands of times.
+# Everything else — and anything carrying an Authorization header — is
+# explicitly marked private, because a CDN caching a user's saved jobs and
+# serving them to the next visitor is the failure mode here.
+_PUBLIC_CACHEABLE = ("/api/jobs", "/api/companies", "/api/stats")
+_CACHE_TTL = int(os.environ.get("PUBLIC_CACHE_SECONDS", "600"))
+
+
+@app.middleware("http")
+async def cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+
+    cacheable = (
+        request.method == "GET"
+        and not request.headers.get("authorization")
+        and path.startswith(_PUBLIC_CACHEABLE)
+        and not path.startswith("/api/me")
+        and "/apply" not in path          # records a click; must reach the origin
+        and response.status_code == 200
+    )
+    if cacheable:
+        response.headers["Cache-Control"] = (
+            f"public, s-maxage={_CACHE_TTL}, stale-while-revalidate=86400"
+        )
+        # Same URL must not serve a logged-in body to an anonymous visitor.
+        response.headers["Vary"] = "Accept-Encoding, Authorization"
+    elif path.startswith("/api"):
+        response.headers["Cache-Control"] = "private, no-store"
+    return response
+
+
+# Per-IP request ceiling. Deliberately modest scope: this is in-process, so with
+# multiple workers or instances the effective limit is the value times the
+# process count, and X-Forwarded-For can be spoofed by the client. It stops a
+# single careless script from exhausting the connection pool — it is not a
+# security boundary. Put real limiting at the edge (Cloudflare/Vercel) before
+# taking serious traffic, and move this to Redis if it needs to be exact.
+_RATE_LIMIT = int(os.environ.get("RATE_LIMIT_PER_MIN", "180"))
+_hits: dict[str, tuple[int, float]] = {}
+
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    if _RATE_LIMIT <= 0 or not request.url.path.startswith("/api"):
+        return await call_next(request)
+    if request.url.path == "/api/health":
+        return await call_next(request)     # uptime monitors poll this by design
+
+    fwd = request.headers.get("x-forwarded-for", "")
+    ip = fwd.split(",")[0].strip() or (request.client.host if request.client else "?")
+
+    now = time.monotonic()
+    count, window_start = _hits.get(ip, (0, now))
+    if now - window_start >= 60:
+        count, window_start = 0, now
+    count += 1
+    _hits[ip] = (count, window_start)
+
+    if len(_hits) > 10_000:     # bound memory; the map is a cache, not a ledger
+        for stale in [k for k, (_, t0) in _hits.items() if now - t0 >= 120]:
+            _hits.pop(stale, None)
+
+    if count > _RATE_LIMIT:
+        retry = max(1, int(60 - (now - window_start)))
+        return JSONResponse(
+            {"detail": "Too many requests"},
+            status_code=429,
+            headers={"Retry-After": str(retry)},
+        )
+    return await call_next(request)
 
 
 def get_db():
