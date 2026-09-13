@@ -81,6 +81,22 @@ class Job(Base):
     last_seen_at = Column(DateTime(timezone=True), default=utcnow, index=True)
     status = Column(String(20), default="active", index=True)   # active | expired
 
+    # Repost history. A listing that expires and later returns under the same
+    # external id is a repost, and repeated reposts are the clearest structural
+    # tell of a ghost job: a role that is advertised, withdrawn and re-advertised
+    # without ever being filled. The orchestrator already reactivates these
+    # rows; without these two columns that event leaves no trace, and the
+    # signal — which nothing else in the market surfaces — is lost.
+    # server_default as well as default: the Python-side default only applies to
+    # ORM inserts, so a plain SQL insert would violate NOT NULL on a database
+    # built by create_all while succeeding on one built by the migration.
+    repost_count = Column(Integer, default=0, server_default="0", nullable=False)
+    last_reposted_at = Column(DateTime(timezone=True))
+    # Cumulative days the listing has spent expired across its whole history.
+    # Kept as a running total so "open for N days" can exclude the gaps rather
+    # than overstating tenure for a role that was withdrawn for months.
+    days_unlisted = Column(Float, default=0.0, server_default="0", nullable=False)
+
     raw_payload = Column(JSON)
     content_hash = Column(String(64))  # detects in-place edits to a listing
 

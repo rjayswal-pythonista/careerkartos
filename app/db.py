@@ -69,8 +69,12 @@ def _add_missing_columns():
     the whole requirement so far, and is safe to run on every start.
     """
     stmts = {
-        "postgresql": ["ALTER TABLE jobs ADD COLUMN IF NOT EXISTS company_name VARCHAR(200)"],
-        "sqlite": ["ALTER TABLE jobs ADD COLUMN company_name VARCHAR(200)"],
+        "postgresql": [
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS company_name VARCHAR(200)",
+        ],
+        "sqlite": [
+            "ALTER TABLE jobs ADD COLUMN company_name VARCHAR(200)",
+        ],
     }.get(engine.dialect.name, [])
     for ddl in stmts:
         try:
