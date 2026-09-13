@@ -69,10 +69,23 @@ def main():
     r = client.get("/api/jobs?q=engineer&per_page=50").json()
     check("free-text search", r["total"] > 0, f"{r['total']} hits for 'engineer'")
 
-    r = client.get("/api/jobs?posted_within_days=7&per_page=100").json()
+    # The recency filter must agree with /api/stats, which counts the same
+    # window. `total <= all_jobs` is not enough — it passes when the filter
+    # matches everything, which is exactly how this broke: the filter OR'd
+    # posted_date with first_seen_at, and first_seen_at is the scrape time, so
+    # a fresh ingest made every row "posted today".
     all_jobs = client.get("/api/jobs?per_page=1").json()["total"]
-    check("recency filter narrows results", r["total"] <= all_jobs,
-          f"{r['total']} of {all_jobs} in last 7d")
+    stats_now = client.get("/api/stats").json()
+    for days, stat_key in ((1, "posted_last_24h"), (7, "posted_last_7d")):
+        got = client.get(f"/api/jobs?posted_within_days={days}&per_page=1").json()["total"]
+        check(f"recency filter agrees with stats ({days}d)",
+              got == stats_now[stat_key],
+              f"filter {got} vs stats {stats_now[stat_key]}")
+
+    narrow = client.get("/api/jobs?posted_within_days=1&per_page=1").json()["total"]
+    wide = client.get("/api/jobs?posted_within_days=365&per_page=1").json()["total"]
+    check("recency windows are ordered", narrow <= wide <= all_jobs,
+          f"1d={narrow} 365d={wide} all={all_jobs}")
 
     # Pick a combination that actually has rows, so this can't pass vacuously.
     eng_remote = client.get("/api/jobs?department=Engineering&remote=true&per_page=100").json()

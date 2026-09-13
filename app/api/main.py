@@ -194,8 +194,14 @@ def _apply_filters(stmt, *, q, company, department, seniority, country, city,
         stmt = stmt.where(Job.is_remote.is_(remote))
     if posted_within_days:
         cutoff = utcnow() - timedelta(days=posted_within_days)
+        # COALESCE, not OR. first_seen_at is when *we* scraped the row, so on a
+        # fresh ingest every job has first_seen_at = today and an OR matches the
+        # entire table — "posted within 24h" returned all 11,878 rows instead of
+        # 314. first_seen_at is only a fallback for sources that publish no
+        # date, which is exactly what COALESCE expresses. /api/stats and the
+        # feed's own sort already use this form; this brings the filter in line.
         stmt = stmt.where(
-            or_(Job.posted_date >= cutoff, Job.first_seen_at >= cutoff)
+            func.coalesce(Job.posted_date, Job.first_seen_at) >= cutoff
         )
     return stmt
 
