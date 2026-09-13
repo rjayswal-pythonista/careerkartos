@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.connectors import ats  # noqa: F401 — registers connectors
+from app.connectors import ats, workday  # noqa: F401 — registers connectors
 from app.db import SessionLocal, init_db
 from app.models.schema import utcnow
 from app.pipeline.normalize import LLMNormalizer
@@ -58,7 +58,13 @@ def main() -> int:
     # at 28 indefinitely, with the scrape reporting a clean run every time.
     with SessionLocal() as s:
         before = s.query(Company).count()
-    seed_registry()
+    # Registry sync is an enhancement; the scrape is the product. A bad row here
+    # once aborted the entire run before a single connector was dispatched, so a
+    # failure is logged loudly and the existing registry is scraped regardless.
+    try:
+        seed_registry()
+    except Exception:
+        log.exception("registry sync failed — scraping the existing registry instead")
     with SessionLocal() as s:
         after = s.query(Company).count()
     if after != before:

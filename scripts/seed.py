@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.connectors import ats, fixture  # noqa: F401 — registers connectors
+from app.connectors import ats, fixture, workday  # noqa: F401 — registers connectors
 from app.connectors.fixture import fixture_client
 from app.db import SessionLocal, engine, init_db
 from app.models.schema import Base, Company
@@ -31,11 +31,16 @@ from app.pipeline.orchestrator import Orchestrator
 # token works — this product indexes employers' own postings, and a reposter
 # would break that claim.
 #
-# All three platforms publish these endpoints as documented, public,
+# Greenhouse, Lever and Ashby publish these endpoints as documented, public,
 # unauthenticated job-board APIs intended for surfacing a company's open roles,
-# so robots_allowed=True / tos_flag=False is accurate for them. Verify both
-# yourself before adding any company on a different platform — the orchestrator
-# trusts these flags and refuses to dispatch anything flagged.
+# so robots_allowed=True / tos_flag=False is accurate for them.
+#
+# Workday rows are a different case and were checked individually: its CXS
+# endpoint is public and unauthenticated but undocumented, so robots.txt was
+# read per employer rather than assumed. See app/connectors/workday.py.
+#
+# Verify both flags yourself before adding any company — the orchestrator trusts
+# them and refuses to dispatch anything flagged.
 REGISTRY = [
     ('Databricks',            'databricks',            'greenhouse', 'databricks',   'Data Infrastructure',     'United States'),
     ('OpenAI',                'openai',                'ashby',      'openai',       'Artificial Intelligence', 'United States'),
@@ -110,6 +115,11 @@ REGISTRY = [
     ('Lattice',               'lattice',               'greenhouse', 'lattice',      'HR Software',             'United States'),
     ('Netlify',               'netlify',               'greenhouse', 'netlify',      'Developer Tools',         'United States'),
     ('Calm',                  'calm',                  'greenhouse', 'calm',         'Mental Health',           'United States'),
+
+    # Workday — robots.txt read per employer on 2026-09-13.
+    # NVIDIA: Allow /NVIDIAExternalCareerSite/, disallows only /talentcommunity/
+    # and /refreshFacet/, neither of which this connector touches.
+    ('NVIDIA',                'nvidia',                'workday',    'nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite', 'Semiconductors', 'United States'),
 ]
 
 
@@ -123,13 +133,24 @@ def _board_url(ats_type: str, ident: str) -> str:
         "greenhouse": f"https://boards.greenhouse.io/{ident}",
         "lever": f"https://jobs.lever.co/{ident}",
         "ashby": f"https://jobs.ashbyhq.com/{ident}",
+        # Workday idents are already "{host}/{site}".
+        "workday": f"https://{ident.split('/', 1)[0]}/en-US/{ident.split('/', 1)[-1]}",
     }.get(ats_type, f"https://{ident}.com/careers")
 
 
 def seed_registry():
     with SessionLocal() as s:
+        taken_slugs = {r[0] for r in s.query(Company.slug).all()}
+        taken_names = {r[0] for r in s.query(Company.name).all()}
+
+        added = 0
         for name, slug, ats_type, ident, industry, hq in REGISTRY:
-            if s.query(Company).filter_by(slug=slug).first():
+            # name and slug are both UNIQUE. Checking only the slug let a row
+            # whose name already existed under a different slug reach the INSERT,
+            # and because the rows commit as one batch that IntegrityError took
+            # every other company down with it — and the scrape with it, since
+            # daily_run calls this before dispatching any connector.
+            if slug in taken_slugs or name in taken_names:
                 continue
             s.add(Company(
                 name=name, slug=slug, ats_type=ats_type, ats_identifier=ident,
@@ -137,8 +158,11 @@ def seed_registry():
                 career_page_url=_board_url(ats_type, ident),
                 robots_allowed=True, tos_flag=False, enabled=True,
             ))
+            taken_slugs.add(slug)
+            taken_names.add(name)
+            added += 1
         s.commit()
-    print(f"registry seeded: {len(REGISTRY)} companies")
+    print(f"registry seeded: {len(REGISTRY)} companies ({added} new)")
 
 
 def main(reset: bool = True):

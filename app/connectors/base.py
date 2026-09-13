@@ -95,15 +95,16 @@ class RateLimiter:
 RATE_LIMITER = RateLimiter()
 
 
-async def polite_get(
+async def polite_request(
     client: httpx.AsyncClient,
+    method: str,
     url: str,
     *,
     retries: int = 3,
     timeout: float = 20.0,
     **kwargs,
 ) -> httpx.Response:
-    """GET with per-domain throttling, retry-with-backoff, and 429 respect."""
+    """Request with per-domain throttling, retry-with-backoff, and 429 respect."""
     from urllib.parse import urlparse
 
     domain = urlparse(url).netloc
@@ -112,7 +113,7 @@ async def polite_get(
     for attempt in range(retries):
         await RATE_LIMITER.acquire(domain)
         try:
-            resp = await client.get(url, timeout=timeout, **kwargs)
+            resp = await client.request(method, url, timeout=timeout, **kwargs)
             if resp.status_code == 429:
                 retry_after = float(resp.headers.get("Retry-After", 2 ** (attempt + 2)))
                 log.warning("429 from %s, backing off %.1fs", domain, retry_after)
@@ -129,6 +130,14 @@ async def polite_get(
             await asyncio.sleep(2 ** attempt)
 
     raise ConnectorError(f"failed after {retries} attempts: {url} ({last_exc})")
+
+
+async def polite_get(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
+    return await polite_request(client, "GET", url, **kwargs)
+
+
+async def polite_post(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
+    return await polite_request(client, "POST", url, **kwargs)
 
 
 # --------------------------------------------------------------------------

@@ -10,6 +10,7 @@ through the parsers proves the parsers handle the real thing.
 from __future__ import annotations
 
 import hashlib
+import json
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -157,6 +158,49 @@ def _make_ashby_payload(seed: int, count: int, drop: set[int] | None = None) -> 
     return {"jobs": jobs}
 
 
+# Workday reports location country-first and collapses multi-site roles to a
+# count, so the fixture carries both forms plus the dashed path equivalent.
+_WD_LOCATIONS = [
+    ("US, CA, Santa Clara", "US-CA-Santa-Clara"),
+    ("India, Bengaluru", "India-Bengaluru"),
+    ("Israel, Yokneam", "Israel-Yokneam"),
+    ("China, Shanghai", "China-Shanghai"),
+    ("US, TX, Austin", "US-TX-Austin"),
+    ("Taiwan, Taipei", "Taiwan-Taipei"),
+    ("Germany, Munich", "Germany-Munich"),
+    ("UK, Cambridge", "UK-Cambridge"),
+]
+
+
+def _make_workday_payload(seed: int, count: int, drop: set[int] | None,
+                          offset: int, limit: int) -> dict:
+    rng = random.Random(seed + 1300)
+    drop = drop or set()
+    mix = _role_mix(seed + 1300, count)
+
+    postings = []
+    for i in range(count):
+        if i in drop:
+            continue
+        title, _ = mix[i]
+        text, path_loc = _WD_LOCATIONS[(i * 3 + seed * 11) % len(_WD_LOCATIONS)]
+        req = f"JR{2000000 + seed * 1000 + i}"
+        days = rng.randint(0, 40)
+        postings.append({
+            "title": title,
+            "externalPath": f"/job/{path_loc}/{title.replace(' ', '-')}_{req}",
+            # Every third role is multi-site and reports a count, not a place —
+            # the case that forces the externalPath fallback.
+            "locationsText": f"{rng.randint(2, 8)} Locations" if i % 3 == 2 else text,
+            "postedOn": "Posted Today" if days == 0 else f"Posted {days} Days Ago",
+            "bulletFields": [req],
+        })
+
+    page = postings[offset:offset + limit]
+    # Workday populates `total` on the first page only; later pages report 0.
+    return {"total": len(postings) if offset == 0 else 0, "jobPostings": page}
+
+
 class FixtureTransport(httpx.AsyncBaseTransport):
     """Intercepts requests and returns recorded payloads, so the real connector
     parsers are exercised end to end without touching the network."""
@@ -180,7 +224,13 @@ class FixtureTransport(httpx.AsyncBaseTransport):
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         url = str(request.url)
         seed = self._seed_for(url)
-        if "greenhouse" in url:
+        if "myworkdayjobs.com" in url:
+            body = json.loads(request.content or b"{}")
+            payload = _make_workday_payload(
+                seed, self.count, self.drop,
+                body.get("offset", 0), body.get("limit", 20),
+            )
+        elif "greenhouse" in url:
             payload = _make_greenhouse_payload(seed, self.count, self.drop)
         elif "lever" in url:
             payload = _make_lever_payload(seed, self.count, self.drop)

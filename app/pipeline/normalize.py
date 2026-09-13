@@ -111,6 +111,13 @@ COUNTRY_ALIASES = {
     "brazil": "Brazil", "mexico": "Mexico", "israel": "Israel", "china": "China",
     "south korea": "South Korea", "sweden": "Sweden", "switzerland": "Switzerland",
     "uae": "United Arab Emirates", "philippines": "Philippines",
+    "taiwan": "Taiwan", "vietnam": "Vietnam", "viet nam": "Vietnam",
+    "malaysia": "Malaysia", "indonesia": "Indonesia", "thailand": "Thailand",
+    "hong kong": "Hong Kong", "norway": "Norway", "denmark": "Denmark",
+    "finland": "Finland", "austria": "Austria", "belgium": "Belgium",
+    "portugal": "Portugal", "romania": "Romania", "czechia": "Czechia",
+    "czech republic": "Czechia", "turkey": "Turkey", "argentina": "Argentina",
+    "new zealand": "New Zealand", "south africa": "South Africa",
 }
 
 US_STATES = {
@@ -274,9 +281,17 @@ def parse_location(location_raw: Optional[str]) -> tuple[Optional[str], Optional
                 break
 
     if not city and parts:
-        candidate = parts[0]
-        if candidate.lower() not in COUNTRY_ALIASES and len(candidate) > 2:
-            city = candidate.title()
+        # Ordering varies by ATS: Greenhouse gives "San Francisco, CA" (city first),
+        # Workday gives "US, CA, Santa Clara" (country first). Discarding country
+        # and region tokens leaves the city wherever it sat.
+        candidates = [
+            p for p in parts
+            if p.lower() not in COUNTRY_ALIASES
+            and p.lower() not in US_STATES
+            and not (len(p) == 2 and p.isupper())
+        ]
+        if candidates and len(candidates[0]) > 2:
+            city = candidates[0].title()
 
     return country, city, is_remote
 

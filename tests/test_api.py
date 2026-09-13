@@ -144,8 +144,22 @@ def main():
     print("\n--- Job detail, similar, apply redirect ---")
     jid = client.get("/api/jobs?per_page=1").json()["items"][0]["id"]
     det = client.get(f"/api/jobs/{jid}").json()
-    check("detail includes description", det.get("description_raw") is not None)
     check("detail has apply_url", det["apply_url"].startswith("http"))
+
+    # Not every ATS ships a description in its list payload — Workday and
+    # SmartRecruiters require a per-posting detail fetch, so those arrive null.
+    # Asserting one arbitrary job has a description therefore passes or fails on
+    # sort order. What must not happen is a connector silently dropping
+    # descriptions feed-wide, so the contract is coverage, not any single row.
+    sample = client.get("/api/jobs?per_page=100").json()["items"]
+    ids = [j["id"] for j in sample]
+    described = sum(
+        1 for i in ids
+        if client.get(f"/api/jobs/{i}").json().get("description_raw")
+    )
+    check("descriptions present across the feed",
+          described >= len(ids) // 2,
+          f"{described}/{len(ids)} carry a description")
 
     sim = client.get(f"/api/jobs/{jid}/similar").json()
     check("similar jobs returned", len(sim) > 0, f"{len(sim)}")
