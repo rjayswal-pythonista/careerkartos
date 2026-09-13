@@ -672,6 +672,7 @@ async function load(){
     el('pager').innerHTML=''; return;
   }
   S.total = d.total; S.pages = d.pages; S.items = d.items||[];
+  if(d.total === 0) track('search_no_results', {query:S.q||null, filters:activeCount()});
   const n = activeCount();
   el('count').innerHTML = `<b>${d.total.toLocaleString()}</b> role${d.total===1?'':'s'}`+
     (n?` · ${n} filter${n===1?'':'s'} active`:'');
@@ -805,7 +806,7 @@ async function openJob(id){
     </div>
     <div class="pbody">
       <div class="pacts">
-        <a class="apply" href="${API}/jobs/${j.id}/apply" target="_blank" rel="noopener">Apply on ${esc(j.company)}'s site →</a>
+        <a class="apply" id="applyBtn" href="${API}/jobs/${j.id}/apply" target="_blank" rel="noopener">Apply on ${esc(j.company)}'s site →</a>
         <button class="ghost${saved?' saved':''}" id="saveBtn">${saved?'★ Saved':'☆ Save'}</button>
         <button class="ghost" id="shareBtn">⇗ Share</button>
       </div>
@@ -821,7 +822,21 @@ async function openJob(id){
       <p style="color:var(--ink-2);font-size:13px">Indexed from ${esc(j.company)}'s own career page. Applying takes you to their site — we don't collect applications or act as a recruiter.</p>
     </div>`;
 
+  track('job_viewed', {
+    job_id:j.id, company:j.company, department:j.department,
+    seniority:j.seniority_level, is_remote:j.is_remote, age_band:a.band,
+  });
+
   el('pclose').onclick = closePanel;
+  el('applyBtn').onclick = ()=>{
+    /* The conversion event. The link opens in a new tab, so this fires
+       reliably without needing to delay navigation. */
+    track('apply_clicked', {
+      job_id:j.id, company:j.company, department:j.department,
+      seniority:j.seniority_level, is_remote:j.is_remote,
+    });
+  };
+
   el('saveBtn').onclick = ()=>{
     toggleSave(j);
     const s = isSaved(j.id);
@@ -916,7 +931,7 @@ function clearAll(){
 /* ---------------- wiring ---------------- */
 function wire(){
   let t;
-  el('q').oninput = e => { clearTimeout(t); t = setTimeout(()=>{ S.q=e.target.value.trim(); S.page=1; S.savedOnly=false; refreshSavedBtn(); load(); }, 230); };
+  el('q').oninput = e => { clearTimeout(t); t = setTimeout(()=>{ S.q=e.target.value.trim(); S.page=1; S.savedOnly=false; refreshSavedBtn(); load(); if(S.q) track('search', {query_length:S.q.length}); }, 230); };
 
   document.addEventListener('click', e=>{
     const m = e.target.closest('[data-more]');
@@ -927,13 +942,15 @@ function wire(){
       if(q.dataset.quick==='remote') S.remote = S.remote?null:true;
       el('remoteOnly').checked = !!S.remote;
       [...el('freshSeg').children].forEach(b=>b.setAttribute('aria-pressed', b.dataset.d===S.days?'true':'false'));
-      S.page=1; S.savedOnly=false; refreshSavedBtn(); buildQuick(); load(); return;
+      S.page=1; S.savedOnly=false; refreshSavedBtn(); buildQuick(); load();
+      track('filter_applied', {facet:q.dataset.quick, source:'quick_chip'}); return;
     }
     const qk = e.target.closest('[data-qk]');
     if(qk){
       const k=qk.dataset.qk, v=qk.dataset.qv;
       const i=S[k].indexOf(v); i>=0?S[k].splice(i,1):S[k].push(v);
-      S.page=1; S.savedOnly=false; refreshSavedBtn(); renderAllFacets(); load(); return;
+      S.page=1; S.savedOnly=false; refreshSavedBtn(); renderAllFacets(); load();
+      track('filter_applied', {facet:qk.dataset.qk, source:'quick_chip'}); return;
     }
   });
 
@@ -945,6 +962,7 @@ function wire(){
       if(cb.checked && i<0) S[k].push(v);
       if(!cb.checked && i>=0) S[k].splice(i,1);
       S.page=1; S.savedOnly=false; refreshSavedBtn(); buildQuick(); load();
+      track('filter_applied', {facet:k, active:cb.checked, source:'sidebar'});
     }
   });
 
@@ -991,8 +1009,86 @@ function wire(){
   });
 }
 
+
+/* ---------------- analytics ----------------
+   Every tool here is keyed and no-ops when its key is absent, so the page is
+   fully functional with none of them configured — that is the default state
+   and local development never phones home.
+
+   Cookieless by deliberate choice: PostHog runs with memory persistence and
+   Clarity sets no first-party cookie, which keeps the site outside the consent
+   banner requirement in the EU/UK. The cost is that a returning visitor counts
+   as new; funnels, filter usage and drop-off within a session all still work,
+   and those are the questions worth answering at this stage. */
+const ANALYTICS = {
+  posthog: '',            // PostHog project API key (phc_...)
+  posthogHost: 'https://us.i.posthog.com',
+  clarity: '',            // Microsoft Clarity project id
+  sentry: '',             // Sentry DSN for the browser
+};
+
+function initAnalytics(){
+  if(ANALYTICS.posthog) initPostHog();
+  if(ANALYTICS.clarity) initClarity();
+  if(ANALYTICS.sentry) initSentry();
+}
+
+function initPostHog(){
+  !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){
+  function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]);
+  t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}
+  (p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",
+  (r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);
+  var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],
+  u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},
+  u.people.toString=function(){return u.toString(1)+".people (stub)"},
+  o="capture identify alias people set set_once register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys".split(" "),
+  n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+  posthog.init(ANALYTICS.posthog, {
+    api_host: ANALYTICS.posthogHost,
+    persistence: 'memory',        // no cookies, no localStorage identity
+    disable_session_recording: false,
+    autocapture: true,
+    capture_pageview: true,
+  });
+}
+
+function initClarity(){
+  (function(c,l,a,r,i,t,y){c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+  t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+  y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+  })(window,document,"clarity","script",ANALYTICS.clarity);
+}
+
+function initSentry(){
+  const s=document.createElement('script');
+  s.src='https://browser.sentry-cdn.com/7.120.0/bundle.tracing.min.js';
+  s.crossOrigin='anonymous';
+  s.onload=()=>{
+    if(!window.Sentry) return;
+    Sentry.init({
+      dsn: ANALYTICS.sentry,
+      tracesSampleRate: 0.1,
+      /* Strip the query string: it carries the user's search terms, which are
+         not ours to ship to a third party for an error report. */
+      beforeSend(event){
+        try{ if(event.request?.url) event.request.url = event.request.url.split('?')[0]; }catch(e){}
+        return event;
+      },
+    });
+  };
+  document.head.appendChild(s);
+}
+
+/* Product events. Named for the questions they answer — where does someone
+   drop out between landing, filtering, and clicking through to an employer? */
+function track(event, props){
+  try{ if(window.posthog?.capture) posthog.capture(event, props||{}); }catch(e){}
+}
+
 /* ---------------- boot ---------------- */
 async function boot(){
+  initAnalytics();
   initTheme();
   readUrl();
   el('q').value = S.q;

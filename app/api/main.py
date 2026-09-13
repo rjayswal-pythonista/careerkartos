@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import warnings
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
@@ -24,6 +25,50 @@ from ..models.schema import (
     Company, Job, OutboundClick, SavedJob, SavedSearch, ScrapeRun, User, utcnow,
 )
 from ..pipeline.normalize import DEPARTMENTS, SENIORITY_LEVELS
+
+
+# ---------------------------------------------------------------- error tracking
+# Optional and key-gated: absent SENTRY_DSN the SDK is never imported, so the
+# dependency stays optional and local runs never report anywhere. Initialised
+# before the app is constructed so startup failures are captured too.
+def _init_sentry() -> bool:
+    dsn = os.environ.get("SENTRY_DSN")
+    if not dsn:
+        return False
+    try:
+        import sentry_sdk
+    except ImportError:
+        warnings.warn("SENTRY_DSN is set but sentry-sdk is not installed")
+        return False
+
+    def _scrub(event, hint):
+        """Drop the query string before an event leaves the process.
+
+        It carries the visitor's search terms, which are not ours to ship to a
+        third party attached to a stack trace.
+        """
+        try:
+            req = event.get("request") or {}
+            if req.get("query_string"):
+                req["query_string"] = ""
+            if req.get("url"):
+                req["url"] = str(req["url"]).split("?")[0]
+        except Exception:
+            pass
+        return event
+
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=os.environ.get("SENTRY_ENV", "production"),
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_RATE", "0.1")),
+        send_default_pii=False,
+        before_send=_scrub,
+    )
+    return True
+
+
+SENTRY_ENABLED = _init_sentry()
+
 
 app = FastAPI(
     title="CareerKartos API",
@@ -498,7 +543,6 @@ if not JWT_SECRET:
     # differ per worker, which is exactly the bug JWT_SECRET exists to prevent —
     # so this must be set in any deployed environment.
     JWT_SECRET = secrets.token_urlsafe(48)
-    import warnings
     warnings.warn(
         "JWT_SECRET is not set — using an ephemeral secret. Sessions will not "
         "survive a restart and will break across multiple workers. Set JWT_SECRET "

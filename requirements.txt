@@ -6,3 +6,4 @@ httpx>=0.27
 python-dateutil>=2.9
 PyJWT>=2.8
 psycopg2-binary>=2.9   # Postgres driver; not needed for the SQLite default
+sentry-sdk[fastapi]>=2.0    # optional; only activates when SENTRY_DSN is set

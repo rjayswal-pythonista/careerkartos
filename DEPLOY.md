@@ -185,6 +185,48 @@ completes rather than duplicating.
 
 ---
 
+## Analytics and monitoring
+
+Every tool is key-gated and inert until configured — the site runs fully with
+none of them, and local development never reports anywhere.
+
+**Frontend** — set the keys in the `ANALYTICS` block at the top of the script in
+`frontend/index.html`:
+
+| Key | Tool | Where to get it |
+|---|---|---|
+| `posthog` | PostHog product analytics | posthog.com → Project Settings → Project API Key (`phc_...`) |
+| `clarity` | Microsoft Clarity heatmaps and session replay | clarity.microsoft.com → Settings → project id |
+| `sentry` | Browser error tracking | sentry.io → Project → Client Keys (DSN) |
+
+PostHog runs with `persistence: 'memory'` — no cookies, so no consent banner is
+required in the EU/UK. The trade-off is that a returning visitor counts as new;
+within-session funnels, filter usage and drop-off all still work.
+
+**Backend** — set on the Render API service:
+
+| Variable | Purpose |
+|---|---|
+| `SENTRY_DSN` | Enables server error tracking. Absent, the SDK is never imported |
+| `SENTRY_ENV` | Environment label, default `production` |
+| `SENTRY_TRACES_RATE` | Performance sample rate, default `0.1` |
+
+Query strings are stripped from events on both sides before they leave the
+process — they carry visitors' search terms, which should not be attached to a
+third-party error report.
+
+**Events captured:** `search`, `filter_applied`, `job_viewed`, `apply_clicked`,
+`search_no_results`. Together these answer the funnel question — how many people
+who land go on to filter, open a role, and click through to the employer — and
+`search_no_results` surfaces demand the registry does not yet cover.
+
+**Uptime.** Point a monitor at `GET /api/health` rather than `/`. It reports
+connector health and full-text index state, so it catches silent degradation
+rather than mere liveness, and on a free Render plan the regular ping also keeps
+the service from sleeping.
+
+---
+
 ## Environment variables, full list
 
 | Variable | Required | Purpose |
@@ -196,6 +238,9 @@ completes rather than duplicating.
 | `ANTHROPIC_API_KEY` | no | Enables LLM normalization fallback. Omit for rules-only |
 | `ALERT_WEBHOOK_URL` | no | Scrape failure and anomaly alerts |
 | `SCRAPE_CONCURRENCY` | no | Sources scraped in parallel, default 2. Raise once the database is on a paid plan |
+| `SENTRY_DSN` | no | Enables server-side error tracking |
+| `SENTRY_ENV` | no | Environment label for Sentry, default `production` |
+| `SENTRY_TRACES_RATE` | no | Sentry performance sample rate, default 0.1 |
 
 ---
 
