@@ -1,6 +1,6 @@
 """Daily scrape entry point. Schedule this once a day.
 
-    0 6 * * *  cd /srv/jobaggregator && python scripts/daily_run.py >> logs/daily.log 2>&1
+    0 6 * * *  cd /srv/careerkartos && python scripts/daily_run.py >> logs/daily.log 2>&1
 
 Exits non-zero if more than a quarter of sources failed, so a supervisor or CI
 scheduler can surface a bad run rather than letting it pass silently.

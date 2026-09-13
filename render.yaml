@@ -7,15 +7,15 @@
 # The frontend is NOT here — under Option B that deploys separately to Vercel.
 
 databases:
-  - name: jobaggregator-db
-    databaseName: jobaggregator
+  - name: careerkartos-db
+    databaseName: careerkartos
     plan: free          # upgrade before real traffic; free tier expires
     postgresMajorVersion: "16"
 
 services:
   # ---------------------------------------------------------------- API
   - type: web
-    name: jobaggregator-api
+    name: careerkartos-api
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -24,7 +24,7 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: jobaggregator-db
+          name: careerkartos-db
           property: connectionString
       - key: JWT_SECRET
         generateValue: true       # Render generates once and keeps it stable
@@ -39,7 +39,7 @@ services:
   # A cron job, not a background thread in the web service: the scrape is long
   # running and must not be killed by a web dyno restart or share its memory.
   - type: cron
-    name: jobaggregator-daily
+    name: careerkartos-daily
     runtime: python
     plan: free
     schedule: "0 2 * * *"        # 02:00 UTC = 07:30 IST
@@ -48,7 +48,7 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: jobaggregator-db
+          name: careerkartos-db
           property: connectionString
       - key: ANTHROPIC_API_KEY
         sync: false

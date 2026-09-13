@@ -23,11 +23,11 @@ Install `gh` if you don't have it (`brew install gh`, or see cli.github.com),
 then:
 
 ```bash
-cd jobaggregator
+cd careerkartos
 
 gh auth login                      # browser flow, one time
 
-gh repo create job-aggregator \
+gh repo create careerkartos \
   --public \
   --source . \
   --remote origin \
@@ -40,7 +40,7 @@ That creates the repo under your account and pushes in one step.
 If you'd rather create the repo in the web UI first, then:
 
 ```bash
-git remote add origin https://github.com/rjayswal-pythonista/job-aggregator.git
+git remote add origin https://github.com/rjayswal-pythonista/careerkartos.git
 git branch -M main
 git push -u origin main
 ```
@@ -88,7 +88,7 @@ registry tells the truth.
 Then trigger the cron job manually once to confirm it works end to end, rather
 than waiting until 02:00 UTC to find out.
 
-Note your API URL: `https://jobaggregator-api.onrender.com`.
+Note your API URL: `https://careerkartos-api.onrender.com`.
 
 > Free-tier Render web services sleep after inactivity, so the first request
 > after a quiet period takes ~30s. Fine for testing, not for real users.
@@ -107,7 +107,7 @@ the API's absolute URL.
 
 ```json
 { "rewrites": [{ "source": "/api/:path*",
-                 "destination": "https://jobaggregator-api.onrender.com/api/:path*" }] }
+                 "destination": "https://careerkartos-api.onrender.com/api/:path*" }] }
 ```
 
 `index.html` keeps `const API = '/api'` untouched. Because the browser only ever
@@ -148,8 +148,8 @@ but leaves the API callable from any site.
 Verify:
 
 ```bash
-curl https://jobaggregator-api.onrender.com/api/health
-curl https://jobaggregator-api.onrender.com/api/stats
+curl https://careerkartos-api.onrender.com/api/health
+curl https://careerkartos-api.onrender.com/api/stats
 ```
 
 ---

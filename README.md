@@ -1,6 +1,6 @@
-# Job Aggregator
+# CareerKartos
 
-Indexes job listings from employer career pages daily and publishes them on a
+*careerkartos.io* — indexes job listings from employer career pages daily and publishes them on a
 searchable feed. Every listing links out to the employer's own posting.
 
 **The product boundary, which everything else follows from:** this is a discovery

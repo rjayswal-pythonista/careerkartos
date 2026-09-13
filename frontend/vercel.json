@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://jobaggregator-api.onrender.com/api/:path*"
+      "destination": "https://careerkartos-api.onrender.com/api/:path*"
     }
   ]
 }

@@ -24,7 +24,7 @@ from ..models.schema import (
 from ..pipeline.normalize import DEPARTMENTS, SENIORITY_LEVELS
 
 app = FastAPI(
-    title="Job Aggregator API",
+    title="CareerKartos API",
     version="1.0.0",
     description=(
         "Indexes job listings published on employer career pages and links "

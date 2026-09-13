@@ -21,7 +21,7 @@ import httpx
 log = logging.getLogger(__name__)
 
 USER_AGENT = (
-    "JobAggregatorBot/1.0 (+https://example.com/bot; job listing indexer; "
+    "CareerKartosBot/1.0 (+https://careerkartos.io/bot; job listing indexer; "
     "contact: ops@example.com)"
 )
 
