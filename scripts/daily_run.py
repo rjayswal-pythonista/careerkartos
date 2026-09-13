@@ -18,7 +18,9 @@ from app.connectors import ats  # noqa: F401 — registers connectors
 from app.db import SessionLocal, init_db
 from app.models.schema import utcnow
 from app.pipeline.normalize import LLMNormalizer
+from app.models.schema import Company
 from app.pipeline.orchestrator import Orchestrator, purge_stale
+from scripts.seed import seed_registry
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,6 +48,16 @@ def send_alert(severity: str, message: str, context: dict):
 
 def main() -> int:
     init_db()
+
+    # Seed the registry if it is empty. The scrape is driven entirely by the
+    # company table, so on a fresh database this would otherwise attempt zero
+    # sources and report a clean run — the most misleading possible outcome.
+    # seed_registry() skips companies that already exist, so this is a no-op
+    # on every subsequent run.
+    with SessionLocal() as s:
+        if not s.query(Company).first():
+            log.info("registry empty — seeding before first scrape")
+            seed_registry()
 
     orch = Orchestrator(SessionLocal, llm=LLMNormalizer(), concurrency=4)
     orch.on_alert(send_alert)

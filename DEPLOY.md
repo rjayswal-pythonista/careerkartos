@@ -76,12 +76,15 @@ Render reads `render.yaml` and provisions all three together.
 database connection string in and generates the JWT secret once, keeping it
 stable across deploys and workers.
 
-**Before the first scrape, seed the company registry.** Render dashboard → API
-service → **Shell**:
+**The registry seeds itself.** `scripts/daily_run.py` seeds the company table
+when it finds it empty, so the first cron run populates the database with no
+manual step. Note the Shell tab is a paid Render feature and is not available
+on free-tier services — nothing here needs it.
 
-```bash
-python -c "from scripts.seed import seed_registry; seed_registry()"
-```
+Trigger the cron job manually once from the Render dashboard
+(**careerkartos-daily** → **Trigger Run**) rather than waiting for 02:00 UTC to
+find out whether it works. The first run seeds 28 companies and ingests several
+thousand listings; expect it to take a few minutes.
 
 Edit `scripts/seed.py:REGISTRY` first — the rows in there are placeholders. For
 each real company you add, verify `robots.txt` and Terms of Service and set
