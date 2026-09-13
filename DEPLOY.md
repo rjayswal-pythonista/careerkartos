@@ -161,6 +161,30 @@ curl https://careerkartos-api.onrender.com/api/stats
 
 ---
 
+## If the first scrape fails on the free database
+
+The first run is the heaviest the system ever does: every listing is new, and
+each row carries the full description plus `raw_payload`. OpenAI alone is ~9.7MB.
+On Render's free Postgres that can surface as
+
+```
+SSL SYSCALL error: EOF detected          # the write that broke the connection
+connection ... failed: Connection refused # every source after it
+```
+
+Rows are flushed in batches of 100 and the scrape runs two sources at a time to
+stay inside what a small instance tolerates, so this should not recur. If it
+does, lower the concurrency further on the cron service:
+
+```
+SCRAPE_CONCURRENCY = 1
+```
+
+Re-running is always safe — the pipeline is idempotent, so a partial run
+completes rather than duplicating.
+
+---
+
 ## Environment variables, full list
 
 | Variable | Required | Purpose |
@@ -171,6 +195,7 @@ curl https://careerkartos-api.onrender.com/api/stats
 | `JWT_TTL_DAYS` | no | Session lifetime, default 30 |
 | `ANTHROPIC_API_KEY` | no | Enables LLM normalization fallback. Omit for rules-only |
 | `ALERT_WEBHOOK_URL` | no | Scrape failure and anomaly alerts |
+| `SCRAPE_CONCURRENCY` | no | Sources scraped in parallel, default 2. Raise once the database is on a paid plan |
 
 ---
 

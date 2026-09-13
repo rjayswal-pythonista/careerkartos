@@ -59,16 +59,27 @@ def main() -> int:
             log.info("registry empty — seeding before first scrape")
             seed_registry()
 
-    orch = Orchestrator(SessionLocal, llm=LLMNormalizer(), concurrency=4)
+    # Concurrency is deliberately low. The bottleneck is the database, not the
+    # remote APIs: four parallel writers streaming full descriptions and
+    # raw_payload into a small Postgres instance is what exhausted it. Override
+    # with SCRAPE_CONCURRENCY once the database is on a larger plan.
+    concurrency = int(os.environ.get("SCRAPE_CONCURRENCY", "2"))
+    orch = Orchestrator(SessionLocal, llm=LLMNormalizer(), concurrency=concurrency)
     orch.on_alert(send_alert)
 
     log.info("starting daily run")
     stats = asyncio.run(orch.run_daily())
 
-    with SessionLocal() as s:
-        swept = purge_stale(s, days=60)
-    if swept:
-        log.info("swept %d listings unseen for 60+ days", swept)
+    # Housekeeping, deliberately non-fatal: the scrape above has already been
+    # committed, and losing the whole run's exit status to a sweep failure
+    # would misreport a successful ingest as a total failure.
+    try:
+        with SessionLocal() as s:
+            swept = purge_stale(s, days=60)
+        if swept:
+            log.info("swept %d listings unseen for 60+ days", swept)
+    except Exception as e:
+        log.error("stale sweep failed (scrape results are unaffected): %s", e)
 
     d = stats.as_dict()
     log.info(

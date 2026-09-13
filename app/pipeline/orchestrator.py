@@ -56,12 +56,14 @@ class Orchestrator:
         session_factory,
         llm: Optional[LLMNormalizer] = None,
         concurrency: int = 4,
+        batch_size: int = 100,
         anomaly_drop_threshold: float = 0.5,
         client_factory=None,
     ):
         self.session_factory = session_factory
         self.llm = llm or LLMNormalizer()
         self.concurrency = concurrency
+        self.batch_size = batch_size
         # Injectable so the pipeline can be exercised against recorded fixtures.
         self.client_factory = client_factory or (
             lambda: httpx.AsyncClient(
@@ -206,6 +208,7 @@ class Orchestrator:
         }
         seen_ids: set[str] = set()
         new_count = upd_count = 0
+        pending = 0
         now = utcnow()
 
         for rj, fields in normalized:
@@ -235,6 +238,15 @@ class Orchestrator:
                     content_hash=content_hash,
                 ))
                 new_count += 1
+                pending += 1
+                # Flush in batches. A large employer's first run is hundreds of
+                # rows carrying full descriptions and raw_payload; accumulating
+                # them into one INSERT produced a multi-hundred-KB statement
+                # that a small Postgres instance drops mid-write ("SSL SYSCALL
+                # error: EOF detected"), taking the connection with it.
+                if pending >= self.batch_size:
+                    session.flush()
+                    pending = 0
             else:
                 job.last_seen_at = now
                 # A previously-expired listing that reappears is reactivated, and
