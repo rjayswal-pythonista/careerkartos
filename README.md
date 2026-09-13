@@ -9,6 +9,9 @@ submit anything on a user's behalf. That boundary is what keeps the product on
 the right side of employer Terms of Service, and it's enforced in the code —
 there is no submit endpoint to accidentally grow one.
 
+Operational procedures — daily checks, adding companies, troubleshooting, analytics —
+are in [SOP.md](SOP.md). Deployment setup is in [DEPLOY.md](DEPLOY.md).
+
 ---
 
 ## Quick start
