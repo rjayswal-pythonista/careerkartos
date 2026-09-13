@@ -58,10 +58,19 @@ class Job(Base):
     seniority_level = Column(String(40), index=True)
 
     location_raw = Column(Text)
-    location_country = Column(String(80), index=True)
-    location_city = Column(String(120), index=True)
+    # Text rather than a bounded String: these are parsed out of free-form
+    # location strings that employers write however they like ("Remote - US,
+    # Canada, UK, Germany, ..."), and a length cap turns an unusual posting
+    # into a hard DataError that fails the whole company's batch.
+    location_country = Column(Text, index=True)
+    location_city = Column(Text, index=True)
     is_remote = Column(Boolean, default=False, index=True)
 
+    # Denormalised from companies.name so it can sit inside the full-text
+    # vector. Searching the joined column instead forces a sequential scan,
+    # because a GIN lookup cannot be OR'd with a predicate on another table.
+    # Kept in sync by the orchestrator on insert and on company rename.
+    company_name = Column(String(200), index=True)
     description_raw = Column(Text)
     description_summary = Column(Text)
 

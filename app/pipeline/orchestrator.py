@@ -219,6 +219,7 @@ class Orchestrator:
             if job is None:
                 session.add(Job(
                     company_id=cfg.company_id,
+                    company_name=cfg.name,
                     external_job_id=rj.external_id,
                     title=rj.title,
                     normalized_title=fields.normalized_title,
@@ -253,6 +254,8 @@ class Orchestrator:
                 # keeps its original first_seen_at so tenure analytics stay honest.
                 if job.status != "active":
                     job.status = "active"
+                if job.company_name != cfg.name:
+                    job.company_name = cfg.name
                 if job.content_hash != content_hash:
                     job.title = rj.title
                     job.normalized_title = fields.normalized_title

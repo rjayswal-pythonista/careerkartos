@@ -167,6 +167,7 @@ button{cursor:pointer}
 }
 .chip b{color:var(--ink);font-weight:700}
 .chip.hot{border-color:var(--fresh);color:var(--fresh);background:var(--fresh-dim)}
+.chip.stale{border-color:var(--recent);color:var(--recent)}
 
 /* ---------------- search rail ---------------- */
 .searchwrap{position:relative;z-index:1;max-width:var(--max);margin:0 auto;padding:0 22px}
@@ -562,21 +563,44 @@ function readUrl(){
   S.view = p.get('view')==='grid'?'grid':'list';
 }
 
+
+/* The refresh time is the product's core claim, so it states when the data was
+   actually collected rather than a vague "just now". The relative form is the
+   glanceable one; the absolute timestamp sits in the tooltip and in the hero
+   chip, because "3h ago" is unverifiable while a real timestamp is not. */
+function freshness(iso){
+  if(!iso) return {short:'never — no scrape has completed', exact:'No successful scrape recorded yet', stale:true};
+  const d = new Date(iso);
+  if(isNaN(d)) return {short:'unknown', exact:'Unknown', stale:true};
+  const exact = d.toLocaleString(undefined,{
+    year:'numeric', month:'short', day:'numeric',
+    hour:'2-digit', minute:'2-digit', timeZoneName:'short'
+  });
+  const mins = Math.max(0, Math.round((Date.now()-d.getTime())/6e4));
+  let short;
+  if(mins < 2)        short = 'just now';
+  else if(mins < 60)  short = mins+' min ago';
+  else if(mins < 1440){ const h=Math.round(mins/60); short = h+(h===1?' hour ago':' hours ago'); }
+  else { const dd=Math.round(mins/1440); short = dd+(dd===1?' day ago':' days ago'); }
+  return {short, exact, stale: mins > 2880};
+}
+
 /* ---------------- pulse + hero ---------------- */
 async function loadPulse(){
   try{
     const s = await (await fetch(API+'/stats')).json();
-    const upd = s.last_updated ? Math.max(0,Math.round((Date.now()-new Date(s.last_updated))/36e5)) : null;
+    const upd = freshness(s.last_updated);
     el('pulse').innerHTML =
       `<span><b>${(s.total_active_jobs||0).toLocaleString()}</b> open roles</span>`+
       `<span><b>${s.total_companies||0}</b> companies</span>`+
       (s.posted_last_24h ? `<span class="live">+${s.posted_last_24h} today</span>` : '')+
-      (upd!==null ? `<span>refreshed ${upd===0?'just now':upd+'h ago'}</span>` : '');
+      `<span title="${esc(upd.exact)}">Updated ${esc(upd.short)}</span>`;
     el('heroStats').innerHTML =
       `<div class="chip"><b>${(s.total_active_jobs||0).toLocaleString()}</b> live roles</div>`+
       `<div class="chip"><b>${s.total_companies||0}</b> employers</div>`+
       (s.posted_last_24h ? `<div class="chip hot">● <b>${s.posted_last_24h}</b> added today</div>` : '')+
-      (s.posted_last_7d ? `<div class="chip"><b>${s.posted_last_7d}</b> this week</div>` : '');
+      (s.posted_last_7d ? `<div class="chip"><b>${s.posted_last_7d}</b> this week</div>` : '')+
+      `<div class="chip${upd.stale?' stale':''}" title="${esc(upd.exact)}">Collected ${esc(upd.exact)}</div>`;
   }catch(e){ el('pulse').textContent=''; }
 }
 

@@ -94,6 +94,22 @@ def main():
           sum(x["count"] for x in f["departments"]) <= f["total_active"])
     check("remote count present", f["remote_count"] > 0, f["remote_count"])
 
+    # Search must match company name as well as title and description. On
+    # Postgres that only works because company_name is denormalised onto jobs
+    # and sits inside the indexed vector; matching the joined companies table
+    # with an OR silently drops the query to a sequential scan.
+    co = client.get("/api/companies").json()[0]
+    by_co = client.get(f"/api/jobs?q={quote(co['name'])}").json()
+    check("search matches company name", by_co["total"] > 0,
+          f"{co['name']!r} returned {by_co['total']}")
+
+    # last_updated must be null rather than now() when nothing has scraped —
+    # defaulting to now claimed the feed was fresh on an empty database.
+    st_shape = client.get("/api/stats").json()
+    check("last_updated is a real timestamp or null",
+          st_shape["last_updated"] is None or "T" in str(st_shape["last_updated"]),
+          str(st_shape["last_updated"]))
+
     # Every facet value must be directly usable as a filter argument. The
     # companies facet once emitted display names while /api/jobs filtered on
     # slug, so selecting a company silently returned zero. Round-trip each
