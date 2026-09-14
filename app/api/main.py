@@ -195,6 +195,48 @@ class CompanyOut(BaseModel):
         from_attributes = True
 
 
+class DeptTrend(BaseModel):
+    department: str
+    active: int
+    opened_30d: int
+    closed_30d: int
+    # opened_30d - closed_30d. Positive means the team is growing.
+    net_30d: int
+
+
+class CompanyIntelligence(BaseModel):
+    """Hiring signal derived from listing history.
+
+    Everything here comes from the never-delete design: because expired roles
+    are retained rather than dropped, the corpus knows how long a listing stayed
+    open, how often a company opens and closes roles, and which teams are
+    growing. A feed that deletes on disappearance cannot answer any of it.
+    """
+    company: CompanyOut
+    active_jobs: int
+    opened_30d: int
+    closed_30d: int
+    net_30d: int
+    opened_7d: int
+    # Median days from first sighting to expiry, over roles that actually
+    # closed. Median rather than mean: a handful of evergreen listings left
+    # open for a year would drag an average into uselessness.
+    median_days_to_fill: Optional[float] = None
+    filled_sample: int = 0
+    # Roles currently open, and how long the oldest has been sitting there.
+    median_days_open: Optional[float] = None
+    oldest_open_days: Optional[float] = None
+    departments: list[DeptTrend] = []
+    locations: list[dict] = []
+    remote_share: Optional[float] = None
+    # Ghost-job signal.
+    reposted_jobs: int = 0
+    repost_rate: Optional[float] = None
+    top_reposts: list[dict] = []
+    first_indexed: Optional[datetime] = None
+    last_scraped: Optional[datetime] = None
+
+
 class JobOut(BaseModel):
     id: int
     title: str
@@ -214,6 +256,12 @@ class JobOut(BaseModel):
     last_seen_at: Optional[datetime]
     status: str
     description_summary: Optional[str] = None
+    # Ghost-job signal. A role withdrawn and re-advertised repeatedly is the
+    # clearest structural tell that it is not actually being filled, and it is
+    # the one thing this corpus knows that a scraped feed cannot.
+    repost_count: int = 0
+    last_reposted_at: Optional[datetime] = None
+    days_unlisted: float = 0.0
 
 
 class JobDetailOut(JobOut):
@@ -250,6 +298,8 @@ def _job_to_out(j: Job, detail: bool = False):
         apply_url=j.apply_url, posted_date=j.posted_date,
         first_seen_at=j.first_seen_at, last_seen_at=j.last_seen_at,
         status=j.status, description_summary=j.description_summary,
+        repost_count=j.repost_count or 0, last_reposted_at=j.last_reposted_at,
+        days_unlisted=j.days_unlisted or 0.0,
     )
     if detail:
         return JobDetailOut(**base, description_raw=j.description_raw)
@@ -522,6 +572,147 @@ def get_company(slug: str, db: DB):
         id=c.id, name=c.name, slug=c.slug, logo_url=c.logo_url,
         career_page_url=c.career_page_url, industry=c.industry,
         hq_country=c.hq_country, active_jobs=n or 0,
+    )
+
+
+def _as_utc(dt):
+    """SQLite returns naive datetimes; Postgres returns aware ones. Normalise
+    before any arithmetic so the same query works on both backends."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _median(values: list[float]) -> Optional[float]:
+    if not values:
+        return None
+    s = sorted(values)
+    n = len(s)
+    mid = n // 2
+    if n % 2:
+        return round(s[mid], 1)
+    return round((s[mid - 1] + s[mid]) / 2, 1)
+
+
+@app.get("/api/companies/{slug}/intelligence", response_model=CompanyIntelligence)
+def company_intelligence(slug: str, db: DB):
+    """Hiring intelligence for one employer.
+
+    Deliberately computed from listing history rather than self-reported data:
+    every number here is something the company's own board revealed by what it
+    posted and withdrew, which is why it cannot be gamed the way a profile page
+    can. Rows are loaded once and reduced in Python — at a few thousand listings
+    per company that is cheaper than six separate aggregate round trips, and it
+    keeps the date arithmetic identical across SQLite and Postgres.
+    """
+    c = db.scalars(select(Company).where(Company.slug == slug)).first()
+    if not c:
+        raise HTTPException(404, "Company not found")
+
+    jobs = db.scalars(select(Job).where(Job.company_id == c.id)).all()
+    now = utcnow()
+    d30 = now - timedelta(days=30)
+    d7 = now - timedelta(days=7)
+
+    active = [j for j in jobs if j.status == "active"]
+    expired = [j for j in jobs if j.status != "active"]
+
+    def opened_at(j):
+        return _as_utc(j.posted_date or j.first_seen_at)
+
+    opened_30 = sum(1 for j in jobs if (o := opened_at(j)) and o >= d30)
+    opened_7 = sum(1 for j in jobs if (o := opened_at(j)) and o >= d7)
+    # An expired listing's last sighting is when it left the board — the
+    # closest thing to a close date the source gives us.
+    closed_30 = sum(1 for j in expired if (t := _as_utc(j.last_seen_at)) and t >= d30)
+
+    # Time-to-fill, over closed roles only. Subtract the days the listing spent
+    # withdrawn so a reposted role is not credited with the gap as if it had
+    # been open the whole time.
+    fills = []
+    for j in expired:
+        o, t = opened_at(j), _as_utc(j.last_seen_at)
+        if not o or not t:
+            continue
+        days = (t - o).total_seconds() / 86400.0 - (j.days_unlisted or 0.0)
+        if days >= 0:
+            fills.append(days)
+
+    open_ages = []
+    for j in active:
+        o = opened_at(j)
+        if o:
+            age = (now - o).total_seconds() / 86400.0 - (j.days_unlisted or 0.0)
+            if age >= 0:
+                open_ages.append(age)
+
+    # Department trends: what is growing and what is shrinking.
+    dept: dict[str, dict] = {}
+    for j in jobs:
+        key = j.department or "Unspecified"
+        d = dept.setdefault(key, {"active": 0, "opened_30d": 0, "closed_30d": 0})
+        if j.status == "active":
+            d["active"] += 1
+        o = opened_at(j)
+        if o and o >= d30:
+            d["opened_30d"] += 1
+        if j.status != "active" and (t := _as_utc(j.last_seen_at)) and t >= d30:
+            d["closed_30d"] += 1
+    trends = [
+        DeptTrend(department=k, active=v["active"], opened_30d=v["opened_30d"],
+                  closed_30d=v["closed_30d"], net_30d=v["opened_30d"] - v["closed_30d"])
+        for k, v in dept.items()
+    ]
+    # Biggest movers first, then by current headcount of open roles.
+    trends.sort(key=lambda t: (-abs(t.net_30d), -t.active))
+
+    loc: dict[str, int] = {}
+    for j in active:
+        key = "Remote" if j.is_remote else (j.location_country or "Unspecified")
+        loc[key] = loc.get(key, 0) + 1
+    locations = [{"location": k, "count": v}
+                 for k, v in sorted(loc.items(), key=lambda kv: -kv[1])[:8]]
+
+    # Ghost-job signal: roles this employer has withdrawn and re-advertised.
+    reposted = [j for j in jobs if (j.repost_count or 0) > 0]
+    top = sorted(reposted, key=lambda j: -(j.repost_count or 0))[:5]
+    top_reposts = [{
+        "id": j.id,
+        "title": j.normalized_title or j.title,
+        "repost_count": j.repost_count or 0,
+        "days_unlisted": round(j.days_unlisted or 0.0, 1),
+        "status": j.status,
+    } for j in top]
+
+    last_run = db.scalars(
+        select(ScrapeRun).where(ScrapeRun.company_id == c.id,
+                                ScrapeRun.status == "success")
+        .order_by(desc(ScrapeRun.finished_at)).limit(1)
+    ).first()
+    firsts = [_as_utc(j.first_seen_at) for j in jobs if j.first_seen_at]
+
+    return CompanyIntelligence(
+        company=CompanyOut(
+            id=c.id, name=c.name, slug=c.slug, logo_url=c.logo_url,
+            career_page_url=c.career_page_url, industry=c.industry,
+            hq_country=c.hq_country, active_jobs=len(active),
+        ),
+        active_jobs=len(active),
+        opened_30d=opened_30, closed_30d=closed_30, net_30d=opened_30 - closed_30,
+        opened_7d=opened_7,
+        median_days_to_fill=_median(fills), filled_sample=len(fills),
+        median_days_open=_median(open_ages),
+        oldest_open_days=round(max(open_ages), 1) if open_ages else None,
+        departments=trends,
+        locations=locations,
+        remote_share=round(sum(1 for j in active if j.is_remote) / len(active), 3) if active else None,
+        reposted_jobs=len(reposted),
+        repost_rate=round(len(reposted) / len(jobs), 3) if jobs else None,
+        top_reposts=top_reposts,
+        first_indexed=min(firsts) if firsts else None,
+        last_scraped=_as_utc(last_run.finished_at) if last_run else None,
     )
 
 

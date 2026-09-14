@@ -330,6 +330,9 @@ button{cursor:pointer}
 .rsub{color:var(--ink-2);font-size:12px;margin-top:2px;display:flex;align-items:center;gap:7px}
 .rsub .co{font-weight:500;color:var(--ink-2)}
 .row:hover .rsub .co,.row.cursor .rsub .co{color:var(--ink)}
+/* The company name is its own link into that employer's hiring page, so it
+   needs an affordance the rest of the row does not have. */
+.rsub .co[data-co]:hover{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 .logo{
   width:17px;height:17px;border-radius:4px;flex:none;
   display:grid;place-items:center;font-size:9px;font-weight:800;
@@ -596,6 +599,90 @@ footer b{color:var(--ink-2)}
   .live-track li .lt{display:none}
 }
 
+/* ---------------- ghost-job flag ----------------
+   Deliberately amber, not red: a reposted role is a caution, not a verdict.
+   Some legitimately churn (backfills, contract roles), so the UI reports the
+   fact and lets the reader judge rather than labelling the employer. */
+.ghostflag{
+  display:inline-flex;align-items:center;gap:6px;
+  border:1px solid var(--recent);color:var(--recent);background:color-mix(in srgb,var(--recent) 11%,transparent);
+  border-radius:5px;padding:1px 6px;font-size:9px;font-weight:800;letter-spacing:.07em;white-space:nowrap;
+}
+.ghostnote{
+  display:flex;gap:10px;align-items:flex-start;margin:14px 0 2px;padding:11px 13px;
+  border:1px solid var(--recent);border-radius:9px;
+  background:color-mix(in srgb,var(--recent) 9%,transparent);
+}
+.ghostnote b{color:var(--recent);display:block;font-size:12.5px;margin-bottom:2px}
+.ghostnote p{color:var(--ink-2);font-size:12px;line-height:1.55}
+
+/* ---------------- company intelligence ---------------- */
+/* One switch for the whole browse view. Every browse-only region names itself
+   here, so a region added later cannot be left behind on the company page the
+   way .pager and .livewrap were. */
+body.co-mode .hero,
+body.co-mode .searchwrap,
+body.co-mode .shell,
+body.co-mode .livewrap,
+body.co-mode .pager{display:none !important}
+.copage{max-width:var(--max);margin:0 auto;padding:22px;position:relative;z-index:1}
+.cohead{display:flex;align-items:flex-start;gap:15px;flex-wrap:wrap;margin-bottom:18px}
+.cohead .logo{width:44px;height:44px;border-radius:11px;font-size:18px}
+.cohead h1{font-size:26px;letter-spacing:-.03em;line-height:1.15}
+.cohead .cosub{color:var(--ink-2);font-size:13px;margin-top:3px}
+.coback{margin-bottom:14px;font-size:12.5px;color:var(--accent);font-weight:600}
+.costats{display:grid;grid-template-columns:repeat(auto-fit,minmax(146px,1fr));gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:11px;overflow:hidden;margin-bottom:18px}
+.costat{background:var(--surface);padding:13px 15px;min-width:0}
+.costat .lab{font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:700;margin-bottom:5px}
+.costat .val{font-size:23px;font-weight:700;letter-spacing:-.03em;line-height:1.1;font-variant-numeric:tabular-nums}
+.costat .note{font-size:11.5px;color:var(--ink-2);margin-top:3px}
+.costat .val.up{color:var(--fresh)}
+.costat .val.down{color:var(--danger)}
+.costat .val.warn{color:var(--recent)}
+.costat .val.none{color:var(--muted);font-size:15px;font-weight:600}
+
+/* minmax(0,1fr) rather than 1fr: a grid track's default min-width is auto, so
+   the fixed columns inside .trow/.lrow push the panel wider than its share and
+   the page scrolls sideways on a phone. */
+.cogrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+.copanel{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:15px 16px 16px}
+.copanel h3{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:700;margin-bottom:12px}
+.copanel .hint{font-size:11.5px;color:var(--muted);margin-top:11px;line-height:1.5}
+
+/* Department trend bars. A diverging bar from a centre line reads growth and
+   contraction in one glance without needing a legend. */
+.trow{display:grid;grid-template-columns:1fr 108px 42px;align-items:center;gap:10px;padding:5px 0;font-size:12.5px}
+.trow .tn{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbar{position:relative;height:16px;background:var(--bg-2);border-radius:4px;overflow:hidden}
+.tbar::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line-2)}
+.tbar i{position:absolute;top:2px;bottom:2px;border-radius:3px}
+.tbar i.pos{left:50%;background:var(--fresh)}
+.tbar i.neg{right:50%;background:var(--danger)}
+.trow .tv{text-align:right;font-weight:700;font-variant-numeric:tabular-nums;font-size:12px}
+.trow .tv.pos{color:var(--fresh)}.trow .tv.neg{color:var(--danger)}.trow .tv.flat{color:var(--muted)}
+
+.lrow{display:grid;grid-template-columns:1fr 92px 34px;align-items:center;gap:10px;padding:4px 0;font-size:12.5px}
+.lrow .ln{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lbar{height:6px;background:var(--bg-2);border-radius:3px;overflow:hidden}
+.lbar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.lrow .lv{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;font-size:11.5px}
+
+.rprow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.rprow:last-child{border-bottom:0}
+.rprow .rpt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2)}
+.rprow .rpn{color:var(--recent);font-weight:700;flex:none;font-size:11.5px}
+@media (max-width:860px){
+  .cogrid{grid-template-columns:minmax(0,1fr)}
+  .copage{padding:16px}
+  .cohead h1{font-size:21px}
+  /* Narrow the trend/location bars so the label keeps a usable share of a
+     phone-width row rather than being squeezed to an ellipsis. */
+  .trow{grid-template-columns:minmax(0,1fr) 72px 34px;gap:8px}
+  .lrow{grid-template-columns:minmax(0,1fr) 64px 28px;gap:8px}
+  .cohead .ghost{width:100%}
+}
+
 /* ---------------- responsive ---------------- */
 /* Columns drop in order of what a scanner can least afford to lose. Function
    goes first (it is usually implied by the title), then the absolute date —
@@ -730,6 +817,8 @@ footer b{color:var(--ink-2)}
   </main>
 </div>
 
+<section class="copage" id="copage" hidden></section>
+
 <footer>
   <b>How this works.</b> Listings are collected daily from each company's own career page and linked back to the original posting.
   We don't accept applications, and we're not a recruiter — when you apply, you're on the employer's site dealing with the employer.
@@ -780,6 +869,7 @@ const S = {
      which is distinct from 0 so the first j does not skip row one. */
   cursor:-1,
   openId:null,
+  companySlug:null,
   /* Timestamp of the previous visit, read once at boot. Rows first seen after
      it get the one-time highlight sweep. Written back on unload, not on boot,
      so a reload during the same session does not erase the marks. */
@@ -993,6 +1083,12 @@ function qs(){
 }
 function syncUrl(){
   const p = new URLSearchParams();
+  /* The company page is a whole view, not a filter, so it owns the URL alone —
+     that keeps the link shareable and the back button meaningful. */
+  if(S.companySlug){
+    history.replaceState(null,'','?employer='+encodeURIComponent(S.companySlug));
+    return;
+  }
   if(S.q) p.set('q',S.q);
   for(const k of ['department','seniority','country','company']) if(S[k].length) p.set(k,S[k].join('|'));
   if(S.remote) p.set('remote','1');
@@ -1206,8 +1302,9 @@ function renderFeed(items){
       <div class="rmain">
         <div class="rtitle">${esc(j.normalized_title||j.title)}
           ${a.hours<24?'<span class="new">NEW</span>':''}
-          ${place.remote?`<span class="remote">REMOTE${place.scope?' · '+esc(place.scope.toUpperCase()):''}</span>`:''}</div>
-        <div class="rsub"><span class="logo" aria-hidden="true">${esc(firstInitial(j.company))}</span><span class="co">${esc(j.company)}</span><span class="msub">· ${esc(place.text)}</span></div>
+          ${place.remote?`<span class="remote">REMOTE${place.scope?' · '+esc(place.scope.toUpperCase()):''}</span>`:''}
+          ${(j.repost_count||0)>=2?`<span class="ghostflag" title="Withdrawn and re-advertised ${j.repost_count} times since we started indexing it">↻ ${j.repost_count}×</span>`:''}</div>
+        <div class="rsub"><span class="logo" aria-hidden="true">${esc(firstInitial(j.company))}</span><span class="co" data-co="${esc(j.company_slug||'')}" title="See ${esc(j.company)}'s hiring activity">${esc(j.company)}</span><span class="msub">· ${esc(place.text)}</span></div>
       </div>
       <div class="rcell rloc"${place.remote?' data-remote="1"':''}>${esc(place.text)}</div>
       <div class="rcell rfn">${esc(j.department||'')}</div>
@@ -1218,7 +1315,13 @@ function renderFeed(items){
   }).join('');
   S.cursor = -1;
   el('feed').querySelectorAll('.row').forEach((r,i)=>{
-    const open = ()=>openJob(r.dataset.id);
+    const open = e => {
+      /* The company name inside the row is its own destination. Without this
+         the row's handler wins and the click opens the job instead. */
+      const co = e && e.target.closest('[data-co]');
+      if(co && co.dataset.co){ e.stopPropagation(); return openCompany(co.dataset.co); }
+      openJob(r.dataset.id);
+    };
     r.onclick = open;
     r.onkeydown = e => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } };
     /* Hover is the strongest available signal of intent-to-open, so it is
@@ -1387,7 +1490,8 @@ async function openJob(id){
   el('panel').innerHTML = `
     <div class="phead">
       <button class="pclose" id="pclose" aria-label="Close">✕</button>
-      <div class="pco"><span class="logo" aria-hidden="true">${esc(firstInitial(j.company))}</span><span>${esc(j.company)}</span></div>
+      <div class="pco"><span class="logo" aria-hidden="true">${esc(firstInitial(j.company))}</span>
+        <button id="pcoBtn" style="color:var(--accent);font-weight:600" title="See ${esc(j.company)}'s hiring activity">${esc(j.company)} ↗</button></div>
       <h2 id="pTitle">${esc(j.normalized_title||j.title)}</h2>
       <div class="pmeta">
         <span class="tag f${a.band}" title="${esc(on.exact)}">Posted ${a.phrase}</span>
@@ -1398,6 +1502,15 @@ async function openJob(id){
     </div>
     <div class="pbody">
       ${verifyHtml}
+      ${(j.repost_count||0)>=2?`<div class="ghostnote">
+        <div>
+          <b>↻ Reposted ${j.repost_count} times</b>
+          <p>This listing has been withdrawn from ${esc(j.company)}'s board and put back
+             ${plural(j.repost_count,'time')}${(j.days_unlisted||0)>0?`, spending ${Math.round(j.days_unlisted)} days unlisted in total`:''}.
+             That can mean a backfill or a hard-to-fill role — or a posting that is
+             collecting applications without being filled. Worth a question if you interview.</p>
+        </div>
+      </div>`:''}
       <dl class="facts">
         <div class="fact${place.remote?' remote':''}">
           <dt>Location</dt>
@@ -1436,6 +1549,8 @@ async function openJob(id){
   });
 
   el('pclose').onclick = closePanel;
+  const pco = el('pcoBtn');
+  if(pco) pco.onclick = ()=>{ closePanel(); openCompany(j.company_slug); };
   el('applyBtn').onclick = ()=>{
     /* The conversion event. The link opens in a new tab, so this fires
        reliably without needing to delay navigation. */
@@ -1480,6 +1595,182 @@ function closePanel(){
      continues from where it left off instead of jumping to the document top. */
   const row = [...el('feed').querySelectorAll('.row')][S.cursor];
   if(row) row.focus({preventScroll:true});
+}
+
+/* ---------------- company intelligence ----------------
+   Everything shown here is derived from listing history the never-delete design
+   preserves: how long roles stay open, what opens and closes, and what gets
+   withdrawn and re-advertised. None of it is self-reported by the employer,
+   which is exactly why it is worth showing. */
+const fmtN = n => (n==null?'—':Number(n).toLocaleString());
+const plural = (n,w) => `${n} ${w}${n===1?'':'s'}`;
+
+async function openCompany(slug){
+  if(!slug) return;
+  S.companySlug = slug;
+  stopLive();
+  /* The company page replaces the browsing view entirely. Hiding only .hero,
+     .searchwrap and .shell leaves the live ticker and the pager behind, since
+     both live outside those containers — so the switch is driven off one class
+     on <body> and every browse-only element opts in by selector. */
+  document.body.classList.add('co-mode');
+  el('copage').hidden = false;
+  el('copage').innerHTML = `<div class="skrow" style="border:0;background:none;padding:0;grid-template-columns:1fr">
+      <div class="sk-main" style="padding:0;gap:10px">
+        <i class="sk-t" style="--w:30%;height:22px"></i><i class="sk-t" style="--w:55%"></i>
+        <i style="height:78px;border-radius:11px"></i><i style="height:200px;border-radius:11px"></i>
+      </div></div>`;
+  window.scrollTo({top:0});
+  syncUrl();
+
+  let d;
+  try{
+    d = await (await fetch(`${API}/companies/${encodeURIComponent(slug)}/intelligence`)).json();
+    if(d.detail) throw new Error(d.detail);
+  }catch(e){
+    el('copage').innerHTML = `<button class="coback" onclick="closeCompany()">← Back to all roles</button>
+      <div class="state"><h2>Couldn't load this employer</h2>
+      <p>The hiring data didn't come back. Try again in a moment.</p></div>`;
+    return;
+  }
+  renderCompany(d);
+  /* The skeleton was taller than the loaded page on a deep link, leaving the
+     viewport part-way down it. Re-anchor after the real content lands. */
+  window.scrollTo({top:0});
+  track('company_viewed', {company:d.company.name, active_jobs:d.active_jobs});
+}
+
+function closeCompany(){
+  S.companySlug = null;
+  el('copage').hidden = true;
+  document.body.classList.remove('co-mode');
+  load();
+}
+
+function renderCompany(d){
+  const c = d.company;
+  const net = d.net_30d;
+  /* Net hiring is the headline because it is the question a candidate is
+     actually asking — is this company growing or contracting right now? */
+  const netCls = net > 0 ? 'up' : (net < 0 ? 'down' : '');
+  const netTxt = net > 0 ? `+${net}` : String(net);
+
+  const ttf = d.median_days_to_fill;
+  /* A median over a handful of closed roles is noise. Below five we say so
+     rather than printing a number that looks authoritative and isn't. */
+  const ttfEnough = d.filled_sample >= 5;
+
+  const maxNet = Math.max(1, ...d.departments.map(t=>Math.abs(t.net_30d)));
+  const maxLoc = Math.max(1, ...d.locations.map(l=>l.count));
+
+  const rr = d.repost_rate==null?null:Math.round(d.repost_rate*100);
+  const ghosty = d.reposted_jobs > 0;
+
+  el('copage').innerHTML = `
+    <button class="coback" onclick="closeCompany()">← Back to all roles</button>
+    <div class="cohead">
+      <span class="logo" aria-hidden="true">${esc(firstInitial(c.name))}</span>
+      <div style="min-width:0;flex:1">
+        <h1>${esc(c.name)}</h1>
+        <div class="cosub">${[c.industry, c.hq_country].filter(Boolean).map(esc).join(' · ')||'Employer'}
+          ${d.last_scraped?` · board checked ${esc(freshness(d.last_scraped).short)}`:''}</div>
+      </div>
+      <button class="ghost" onclick="filterToCompany('${esc(c.slug)}')">View ${plural(d.active_jobs,'open role')} →</button>
+    </div>
+
+    <div class="costats">
+      <div class="costat">
+        <div class="lab">Open roles</div>
+        <div class="val">${fmtN(d.active_jobs)}</div>
+        <div class="note">${d.opened_7d?`${d.opened_7d} added this week`:'none added this week'}</div>
+      </div>
+      <div class="costat">
+        <div class="lab">Net change · 30d</div>
+        <div class="val ${netCls}">${esc(netTxt)}</div>
+        <div class="note">${d.opened_30d} opened · ${d.closed_30d} closed</div>
+      </div>
+      <div class="costat">
+        <div class="lab">Median time to fill</div>
+        ${ttf!=null && ttfEnough
+          ? `<div class="val">${ttf}<span style="font-size:13px;font-weight:600;color:var(--ink-2)"> days</span></div>
+             <div class="note">across ${plural(d.filled_sample,'closed role')}</div>`
+          : `<div class="val none">Not enough history</div>
+             <div class="note">${d.filled_sample?`only ${plural(d.filled_sample,'role')} closed so far`:'no roles closed yet'}</div>`}
+      </div>
+      <div class="costat">
+        <div class="lab">Longest open</div>
+        <div class="val ${d.oldest_open_days>90?'warn':''}">${d.oldest_open_days!=null?Math.round(d.oldest_open_days):'—'}<span style="font-size:13px;font-weight:600;color:var(--ink-2)"> days</span></div>
+        <div class="note">${d.median_days_open!=null?`median ${Math.round(d.median_days_open)} days open`:''}</div>
+      </div>
+      <div class="costat">
+        <div class="lab">Reposted roles</div>
+        <div class="val ${ghosty?'warn':''}">${fmtN(d.reposted_jobs)}</div>
+        <div class="note">${rr!=null?`${rr}% of everything indexed`:''}</div>
+      </div>
+      <div class="costat">
+        <div class="lab">Remote share</div>
+        <div class="val">${d.remote_share!=null?Math.round(d.remote_share*100)+'%':'—'}</div>
+        <div class="note">of currently open roles</div>
+      </div>
+    </div>
+
+    <div class="cogrid">
+      <div class="copanel">
+        <h3>Which teams are growing</h3>
+        ${d.departments.length ? d.departments.slice(0,9).map(t=>{
+          const w = Math.round(Math.abs(t.net_30d)/maxNet*50);
+          const cls = t.net_30d>0?'pos':(t.net_30d<0?'neg':'flat');
+          return `<div class="trow">
+            <div class="tn" title="${esc(t.department)} — ${t.active} open now">${esc(t.department)}</div>
+            <div class="tbar">${t.net_30d?`<i class="${cls}" style="width:${w}%"></i>`:''}</div>
+            <div class="tv ${cls}">${t.net_30d>0?'+':''}${t.net_30d}</div>
+          </div>`;
+        }).join('') : '<p class="hint">No department data yet.</p>'}
+        <p class="hint">Roles opened minus roles closed in the last 30 days. Derived from what the board actually posted and withdrew.</p>
+      </div>
+
+      <div class="copanel">
+        <h3>Where they're hiring</h3>
+        ${d.locations.length ? d.locations.map(l=>`
+          <div class="lrow">
+            <div class="ln">${esc(l.location)}</div>
+            <div class="lbar"><i style="width:${Math.round(l.count/maxLoc*100)}%"></i></div>
+            <div class="lv">${l.count}</div>
+          </div>`).join('') : '<p class="hint">No location data yet.</p>'}
+      </div>
+
+      <div class="copanel" style="grid-column:1/-1">
+        <h3>Repost history</h3>
+        ${ghosty ? `
+          <div class="ghostnote" style="margin-top:0">
+            <div>
+              <b>${plural(d.reposted_jobs,'role')} withdrawn and re-advertised</b>
+              <p>A role that keeps coming back may be a genuine backfill or a hard-to-fill
+                 position — but repeated reposts are also the clearest sign of a listing
+                 that is never actually filled. We show the count and let you judge.</p>
+            </div>
+          </div>
+          <div style="margin-top:12px">
+            ${d.top_reposts.map(r=>`
+              <div class="rprow">
+                <div class="rpt">${esc(r.title)}</div>
+                <div class="rpn">${plural(r.repost_count,'repost')}</div>
+                <div class="rpn" style="color:var(--muted);font-weight:600">${r.days_unlisted}d unlisted</div>
+              </div>`).join('')}
+          </div>`
+        : `<p class="hint" style="margin-top:0">No role from this employer has been withdrawn and
+             re-advertised since we started indexing them${d.first_indexed?` on ${esc(new Date(ts(d.first_indexed)).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'}))}`:''}.
+             That is a good sign: listings here get filled rather than recycled.</p>`}
+      </div>
+    </div>`;
+}
+
+/* Jump from the company page into the feed, filtered to that employer. */
+function filterToCompany(slug){
+  closeCompany();
+  S.company = [slug]; S.page = 1; S.savedOnly = false;
+  renderAllFacets(); load();
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 /* ---------------- shortcut overlay ---------------- */
@@ -1837,8 +2128,17 @@ async function boot(){
   loadPulse();
   /* Read ?job= before load(): load() calls syncUrl(), which rewrites the query
      string from state and would drop the parameter before we could use it. */
-  const deep = new URLSearchParams(location.search).get('job');
+  const params = new URLSearchParams(location.search);
+  const deep = params.get('job');
+  const employer = params.get('employer');
   await loadFacets().catch(()=>{});
+  if(employer){
+    /* A shared employer link opens straight onto that page; the feed still
+       loads behind it so returning is instant. */
+    load();
+    await openCompany(employer);
+    return;
+  }
   await load();
   if(deep) openJob(deep);
 }

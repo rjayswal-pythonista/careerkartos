@@ -26,6 +26,20 @@ from .normalize import LLMNormalizer, normalize
 log = logging.getLogger(__name__)
 
 
+def _as_utc(dt: datetime) -> datetime:
+    """Make a datetime safe to subtract from utcnow().
+
+    SQLite has no native timestamp type and hands back naive datetimes even for
+    DateTime(timezone=True) columns, while Postgres returns aware ones. Mixing
+    the two in arithmetic raises TypeError, so every stored timestamp is
+    normalised here before it is compared. Naive values are assumed UTC, which
+    is what the writer stored.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 class RunStats:
     def __init__(self):
         self.companies_attempted = 0
@@ -249,11 +263,24 @@ class Orchestrator:
                     session.flush()
                     pending = 0
             else:
-                job.last_seen_at = now
                 # A previously-expired listing that reappears is reactivated, and
                 # keeps its original first_seen_at so tenure analytics stay honest.
                 if job.status != "active":
+                    # Record the repost before last_seen_at is overwritten: the
+                    # gap between the last sighting and now is exactly how long
+                    # the role was off the employer's board, and it is the only
+                    # moment that interval is still recoverable.
+                    prev_seen = job.last_seen_at
+                    if prev_seen is not None:
+                        gap_days = (_as_utc(now) - _as_utc(prev_seen)).total_seconds() / 86400.0
+                        # Guard against a clock skew or a backfill producing a
+                        # negative gap that would silently shrink the total.
+                        if gap_days > 0:
+                            job.days_unlisted = (job.days_unlisted or 0.0) + gap_days
+                    job.repost_count = (job.repost_count or 0) + 1
+                    job.last_reposted_at = now
                     job.status = "active"
+                job.last_seen_at = now
                 if job.company_name != cfg.name:
                     job.company_name = cfg.name
                 if job.content_hash != content_hash:
