@@ -722,6 +722,40 @@ body.co-mode .pager{display:none !important}
   .pulse{display:none}
   footer{padding:26px 18px 40px}
 }
+/* ---------------- application tracker board ---------------- */
+/* .view sets display:flex, which beats [hidden]'s UA display:none, so the
+   list/grid and list/board switches would otherwise show at the same time. */
+.view[hidden]{display:none}
+.board{display:grid;grid-template-columns:repeat(5,minmax(190px,1fr));gap:10px;align-items:start}
+.bcol{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);min-height:120px;display:flex;flex-direction:column}
+.bcol.over{border-color:var(--accent);background:var(--accent-dim)}
+.bcol > h4{margin:0;padding:10px 12px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-2);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
+.bcol > h4 .n{color:var(--muted);font-variant-numeric:tabular-nums}
+/* The status colour lives on a top edge rather than the whole column: five
+   saturated blocks side by side would drown the cards they exist to frame. */
+.bcol{border-top:2px solid var(--tint,var(--line-2))}
+.bcol[data-s="saved"]{--tint:var(--aging)}
+.bcol[data-s="applied"]{--tint:var(--accent)}
+.bcol[data-s="interviewing"]{--tint:var(--recent)}
+.bcol[data-s="offer"]{--tint:var(--fresh)}
+.bcol[data-s="rejected"]{--tint:var(--danger)}
+.bcards{padding:8px;display:flex;flex-direction:column;gap:8px;flex:1}
+.bcard{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;cursor:grab;
+  transition:border-color var(--t-fast) var(--ease-out),transform var(--t-fast) var(--ease-out)}
+.bcard:hover{border-color:var(--line-2)}
+.bcard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bcard.dragging{opacity:.45;cursor:grabbing}
+.bcard .bt{font-weight:600;font-size:13px;line-height:1.3;margin-bottom:3px}
+.bcard .bc{font-size:11.5px;color:var(--ink-2)}
+.bcard .bm{font-size:11px;color:var(--muted);margin-top:4px;display:flex;gap:6px;flex-wrap:wrap}
+.bcard select{width:100%;margin-top:7px;background:var(--bg-2);color:var(--ink-2);border:1px solid var(--line);
+  border-radius:6px;padding:3px 5px;font:inherit;font-size:11px}
+.bcard textarea{width:100%;margin-top:6px;background:var(--bg-2);color:var(--ink);border:1px solid var(--line);
+  border-radius:6px;padding:5px 6px;font:inherit;font-size:11.5px;resize:vertical;min-height:30px}
+.bempty{padding:14px 12px;color:var(--muted);font-size:11.5px;text-align:center}
+@media(max-width:1000px){.board{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:620px){.board{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -795,6 +829,10 @@ body.co-mode .pager{display:none !important}
           <button data-v="list" class="on" title="List view" aria-label="List view">☰</button>
           <button data-v="grid" title="Grid view" aria-label="Grid view">▦</button>
         </div>
+        <div class="view" id="svview" hidden>
+          <button data-sv="list" class="on" title="List of saved roles" aria-label="Saved roles as a list">☰ List</button>
+          <button data-sv="board" title="Application tracker" aria-label="Saved roles as an application board">▤ Board</button>
+        </div>
         <select class="sel" id="sort" aria-label="Sort results">
           <option value="newest">Newest first</option>
           <option value="oldest">Oldest first</option>
@@ -864,6 +902,12 @@ const S = {
   facets:null, total:0, pages:1, expanded:{}, view:'list',
   saved:JSON.parse(localStorage.getItem('ck_saved')||'[]'),
   savedOnly:false, items:[],
+  /* Application state per saved job id: {status, notes, at}. Local-first, the
+     same bargain the saved list already makes — no account, no friction, and
+     it does not leave this browser. syncTrack() mirrors it to the API once a
+     session token exists; nothing signs in today. */
+  track:JSON.parse(localStorage.getItem('ck_track')||'{}'),
+  savedView:localStorage.getItem('ck_savedview')||'list',
   token:localStorage.getItem('tok')||null,
   /* Keyboard cursor index into the rendered feed. -1 means "no cursor yet",
      which is distinct from 0 so the first j does not skip row one. */
@@ -1403,6 +1447,7 @@ function toggleSave(job){
   refreshSavedBtn();
 }
 function renderSaved(){
+  if(S.savedView === 'board') return renderBoard();
   stopLive();
   el('count').innerHTML = `<b>${S.saved.length}</b> saved role${S.saved.length===1?'':'s'}`;
   el('pager').innerHTML = '';
@@ -1418,7 +1463,137 @@ function renderSaved(){
   }
   renderFeed(S.saved);
 }
-function exitSaved(){ S.savedOnly=false; refreshSavedBtn(); load(); }
+function exitSaved(){
+  S.savedOnly=false;
+  el('svview').hidden = true;
+  el('view').hidden = false;
+  refreshSavedBtn();
+  load();
+}
+
+/* ---------------- application tracker ---------------- */
+const STATUSES = [
+  ['saved','Saved'], ['applied','Applied'], ['interviewing','Interviewing'],
+  ['offer','Offer'], ['rejected','Rejected'],
+];
+
+function trackOf(id){ return S.track[String(id)] || {status:'saved', notes:''}; }
+
+function setTrack(id, patch){
+  const k = String(id);
+  S.track[k] = {...trackOf(k), ...patch, at:new Date().toISOString()};
+  localStorage.setItem('ck_track', JSON.stringify(S.track));
+  syncTrack(k);
+}
+
+/* Mirrors one card to the account-backed copy. The endpoint has existed since
+   before the board did; there is simply no sign-in UI yet, so this is inert
+   until one lands. Failures stay silent because the local copy is the source
+   of truth — a tracker that threw a toast every time the network blinked would
+   be worse than one that quietly catches up later. */
+async function syncTrack(id){
+  if(!S.token) return;
+  const t = trackOf(id);
+  try{
+    await fetch(`${API}/me/saved-jobs`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json', Authorization:`Bearer ${S.token}`},
+      body:JSON.stringify({job_id:Number(id), application_status:t.status, notes:t.notes||null}),
+    });
+  }catch(e){ /* local copy already holds it */ }
+}
+
+function boardCard(j){
+  const t = trackOf(j.id);
+  const loc = j.is_remote && !j.location_city ? 'Remote'
+    : [j.location_city, j.location_country].filter(Boolean).join(', ') || '';
+  const opts = STATUSES.map(([v,l]) =>
+    `<option value="${v}"${v===t.status?' selected':''}>${l}</option>`).join('');
+  return `<article class="bcard" draggable="true" data-id="${j.id}" tabindex="0"
+      aria-label="${esc(j.title)} at ${esc(j.company)}">
+    <div class="bt">${esc(j.normalized_title||j.title)}</div>
+    <div class="bc">${esc(j.company)}</div>
+    <div class="bm">${loc?`<span>${esc(loc)}</span>`:''}${j.department?`<span>· ${esc(j.department)}</span>`:''}</div>
+    <select data-move="${j.id}" aria-label="Move ${esc(j.title)} to another stage">${opts}</select>
+    <textarea data-note="${j.id}" rows="1" placeholder="Notes…"
+      aria-label="Notes for ${esc(j.title)}">${esc(t.notes||'')}</textarea>
+  </article>`;
+}
+
+function renderBoard(){
+  stopLive();
+  el('fhead').classList.add('hide');
+  el('pager').innerHTML = '';
+  el('count').innerHTML = `<b>${S.saved.length}</b> role${S.saved.length===1?'':'s'} in your pipeline`;
+
+  if(!S.saved.length){
+    el('feed').className = 'feed';
+    el('feed').innerHTML = `<div class="state"><h2>Your pipeline is empty</h2>
+      <p>Save a role and it lands here. Drag between columns as you go, or use the dropdown on each card.</p>
+      <button onclick="exitSaved()">Back to all roles</button></div>`;
+    return;
+  }
+
+  const cols = STATUSES.map(([v,label])=>{
+    const inCol = S.saved.filter(j=>trackOf(j.id).status===v);
+    return `<section class="bcol" data-s="${v}" aria-label="${label}">
+      <h4>${label}<span class="n">${inCol.length}</span></h4>
+      <div class="bcards">${inCol.map(boardCard).join('') ||
+        '<div class="bempty">Nothing here</div>'}</div>
+    </section>`;
+  }).join('');
+
+  el('feed').className = 'board';
+  el('feed').innerHTML = cols;
+  wireBoard();
+}
+
+function wireBoard(){
+  const feed = el('feed');
+
+  // Dropdown and notes carry the board for keyboard and screen-reader users;
+  // drag-and-drop alone would make the tracker unusable without a mouse.
+  feed.querySelectorAll('select[data-move]').forEach(sel=>{
+    sel.onchange = e => { setTrack(sel.dataset.move, {status:e.target.value}); renderBoard(); };
+  });
+  feed.querySelectorAll('textarea[data-note]').forEach(ta=>{
+    ta.onchange = () => setTrack(ta.dataset.note, {notes:ta.value});
+  });
+
+  feed.querySelectorAll('.bcard').forEach(card=>{
+    card.ondragstart = e => {
+      e.dataTransfer.setData('text/plain', card.dataset.id);
+      e.dataTransfer.effectAllowed = 'move';
+      card.classList.add('dragging');
+    };
+    card.ondragend = () => card.classList.remove('dragging');
+  });
+
+  feed.querySelectorAll('.bcol').forEach(col=>{
+    col.ondragover = e => { e.preventDefault(); col.classList.add('over'); };
+    col.ondragleave = () => col.classList.remove('over');
+    col.ondrop = e => {
+      e.preventDefault();
+      col.classList.remove('over');
+      const id = e.dataTransfer.getData('text/plain');
+      if(!id) return;
+      setTrack(id, {status:col.dataset.s});
+      renderBoard();
+      toast(`Moved to ${col.dataset.s}`);
+    };
+  });
+}
+
+/* Applying is the event the board exists to record, and asking someone to come
+   back and drag a card after they have already left for the employer's site is
+   how a tracker goes stale. Only advances from 'saved' — a role already at
+   interviewing must not be dragged backwards by a second click on Apply. */
+function markApplied(job){
+  if(!isSaved(job.id)) toggleSave(job);
+  if(trackOf(job.id).status !== 'saved') return;
+  setTrack(job.id, {status:'applied'});
+  if(S.savedOnly && S.savedView==='board') renderBoard();
+}
 
 /* ---------------- detail panel ---------------- */
 async function openJob(id){
@@ -1558,6 +1733,7 @@ async function openJob(id){
       job_id:j.id, company:j.company, department:j.department,
       seniority:j.seniority_level, is_remote:j.is_remote,
     });
+    markApplied(j);
   };
 
   el('saveBtn').onclick = ()=>{
@@ -1943,7 +2119,19 @@ function wire(){
   el('savedBtn').onclick = ()=>{
     S.savedOnly = !S.savedOnly;
     refreshSavedBtn();
+    // The list/board switch belongs to the saved view; in the main feed it
+    // would offer a board of nothing.
+    el('svview').hidden = !S.savedOnly;
+    el('view').hidden = S.savedOnly;
     S.savedOnly ? renderSaved() : load();
+  };
+
+  el('svview').onclick = e => {
+    const b = e.target.closest('button[data-sv]'); if(!b) return;
+    S.savedView = b.dataset.sv;
+    localStorage.setItem('ck_savedview', S.savedView);
+    [...el('svview').children].forEach(x=>x.classList.toggle('on', x===b));
+    renderSaved();
   };
 
   el('keysBtn').onclick = openKeys;
@@ -2009,6 +2197,7 @@ function wire(){
         if(job){
           e.preventDefault();
           track('apply_clicked', {job_id:job.id, company:job.company, source:'keyboard'});
+          markApplied(job);
           window.open(`${API}/jobs/${job.id}/apply`,'_blank','noopener');
         }
         break;
@@ -2119,6 +2308,7 @@ async function boot(){
   el('remoteOnly').checked = !!S.remote;
   [...el('freshSeg').children].forEach(b=>b.setAttribute('aria-pressed', b.dataset.d===S.days?'true':'false'));
   [...el('view').children].forEach(x=>x.classList.toggle('on', x.dataset.v===S.view));
+  [...el('svview').children].forEach(x=>x.classList.toggle('on', x.dataset.sv===S.savedView));
   refreshSavedBtn();
   wire();
   /* Stamp the visit on the way out rather than at boot, so a reload mid-session

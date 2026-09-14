@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import time
 import warnings
@@ -16,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import Integer, String, and_, cast, desc, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -24,9 +25,11 @@ from sqlalchemy import text as sa_text
 
 from ..db import SessionLocal, engine, init_db
 from ..models.schema import (
-    Company, Job, OutboundClick, SavedJob, SavedSearch, ScrapeRun, User, utcnow,
+    Base, Company, Job, OutboundClick, SavedJob, SavedSearch, ScrapeRun, User, utcnow,
 )
 from ..pipeline.normalize import DEPARTMENTS, SENIORITY_LEVELS
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------- error tracking
@@ -779,13 +782,22 @@ def health(db: DB):
         .group_by(Company.name, ScrapeRun.error_message)
     ).all()
     total = sum(by_status.values()) or 1
+    # A missing migration is not "degraded", it is broken: reads of the affected
+    # table fail outright. It outranks the scrape-failure ratio, which is a
+    # downstream symptom of the same cause.
+    status = "ok" if by_status.get("failed", 0) / total < 0.2 else "degraded"
+    if SCHEMA_DRIFT:
+        status = "schema_out_of_date"
     return {
-        "status": "ok" if by_status.get("failed", 0) / total < 0.2 else "degraded",
+        "status": status,
         "runs_last_24h": by_status,
         "failing_sources": [
             {"company": n, "error": (e or "")[:200], "last_attempt": t} for n, e, t in failing
         ],
         "search_index": _search_index_present(),
+        # Present only when something is wrong, so a healthy payload is unchanged.
+        **({"missing_columns": SCHEMA_DRIFT,
+            "action": "run 'alembic upgrade head' against this database"} if SCHEMA_DRIFT else {}),
     }
 
 
@@ -878,10 +890,25 @@ CurrentUser = Annotated[User, Depends(current_user)]
 
 # ---------------------------------------------------------------- saved jobs
 
+# The tracker renders one column per status, so an unrecognised value would
+# create a row the board cannot display. The column was always documented as a
+# fixed set; it just was not enforced.
+APPLICATION_STATUSES = ("saved", "applied", "interviewing", "rejected", "offer")
+
+
 class SaveJobIn(BaseModel):
     job_id: int
     application_status: str = "saved"
     notes: Optional[str] = None
+
+    @field_validator("application_status")
+    @classmethod
+    def _known_status(cls, v: str) -> str:
+        if v not in APPLICATION_STATUSES:
+            raise ValueError(
+                f"application_status must be one of {', '.join(APPLICATION_STATUSES)}"
+            )
+        return v
 
 
 @app.get("/api/me/saved-jobs")
@@ -1034,9 +1061,49 @@ def apply_assist(job_id: int, user: CurrentUser, db: DB):
     }
 
 
+def _check_schema_current() -> list[str]:
+    """Report ORM columns the database does not actually have.
+
+    A missing migration is otherwise invisible until the first query: the
+    process boots, /api/health answers, and every read of `jobs` fails with
+    UndefinedColumn. That is what happened when 0002 shipped without its
+    migration — Render skips preDeployCommand on free instances — and the only
+    symptom users saw was an empty feed.
+
+    Checked at startup so the cause is stated once, loudly, in the logs, and
+    surfaced by /api/health rather than inferred from a stack trace.
+    """
+    try:
+        from sqlalchemy import inspect as sa_inspect
+
+        insp = sa_inspect(engine)
+        missing: list[str] = []
+        for table in Base.metadata.sorted_tables:
+            if not insp.has_table(table.name):
+                continue
+            have = {c["name"] for c in insp.get_columns(table.name)}
+            missing += [f"{table.name}.{c.name}" for c in table.columns if c.name not in have]
+        return sorted(missing)
+    except Exception as e:      # never let a diagnostic break startup
+        log.warning("schema check skipped: %s", e)
+        return []
+
+
+SCHEMA_DRIFT: list[str] = []
+
+
 @app.on_event("startup")
 def _startup():
     init_db()
+    global SCHEMA_DRIFT
+    SCHEMA_DRIFT = _check_schema_current()
+    if SCHEMA_DRIFT:
+        log.error(
+            "SCHEMA OUT OF DATE — %d column(s) missing: %s. "
+            "Queries touching them will fail with UndefinedColumn. "
+            "Run 'alembic upgrade head' against this database now.",
+            len(SCHEMA_DRIFT), ", ".join(SCHEMA_DRIFT),
+        )
 
 
 # Frontend is mounted last so it never shadows an /api route.

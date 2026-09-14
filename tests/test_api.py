@@ -220,6 +220,23 @@ def main():
                 headers=H)
     saved = client.get("/api/me/saved-jobs", headers=H).json()
     check("status update, no duplicate", len(saved) == 1 and saved[0]["application_status"] == "applied")
+
+    # The tracker renders one column per status, so an unrecognised value would
+    # land a row on a board that has nowhere to draw it. The set was documented
+    # in the schema comment but never enforced.
+    bad = client.post("/api/me/saved-jobs",
+                      json={"job_id": jid, "application_status": "ghosted"},
+                      headers=H)
+    check("unknown application_status is rejected", bad.status_code == 422,
+          f"got {bad.status_code}")
+    still = client.get("/api/me/saved-jobs", headers=H).json()
+    check("rejected status leaves the row untouched",
+          still[0]["application_status"] == "applied")
+    for s in ("saved", "applied", "interviewing", "rejected", "offer"):
+        ok = client.post("/api/me/saved-jobs",
+                         json={"job_id": jid, "application_status": s}, headers=H)
+        check(f"status {s!r} accepted", ok.status_code == 200)
+
     check("unsave", client.delete(f"/api/me/saved-jobs/{jid}", headers=H).status_code == 200)
     check("saved list now empty", len(client.get("/api/me/saved-jobs", headers=H).json()) == 0)
 
