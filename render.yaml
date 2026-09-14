@@ -19,11 +19,16 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    # Runs once per deploy, before any new instance serves traffic. Schema
-    # changes must not happen at application startup: with more than one
-    # instance, every booting process would issue the same ALTER concurrently.
-    preDeployCommand: alembic upgrade head
-    startCommand: uvicorn app.api.main:app --host 0.0.0.0 --port $PORT
+    # preDeployCommand needs a paid plan — Render rejects it on free with
+    # "pre-deploy command is not supported for free tier services", which
+    # fails the Blueprint sync outright rather than degrading gracefully.
+    # Free web services are single-instance, so the concurrent-ALTER risk
+    # preDeployCommand exists to avoid does not apply yet. Folding the
+    # migration into startCommand is the pragmatic substitute until this
+    # service moves to a plan that supports multiple instances — at that
+    # point this must go back to preDeployCommand, or two instances booting
+    # together will race on the same ALTER.
+    startCommand: alembic upgrade head && uvicorn app.api.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
@@ -49,7 +54,11 @@ services:
                                  # $1/month minimum per cron service
     schedule: "0 2 * * *"        # 02:00 UTC = 07:30 IST
     buildCommand: pip install -r requirements.txt
-    startCommand: python scripts/daily_run.py
+    # alembic upgrade head is idempotent, so running it here too is a no-op
+    # once the web service has already migrated. It is a safety net for the
+    # case where the cron runs before the web service has, e.g. a manual
+    # "Trigger Run" right after a Blueprint sync.
+    startCommand: alembic upgrade head && python scripts/daily_run.py
     envVars:
       - key: DATABASE_URL
         fromDatabase:
