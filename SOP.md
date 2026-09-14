@@ -68,10 +68,32 @@ contradicts the product's central claim that every listing comes from the employ
 
 ### Deploying
 
-- **Frontend:** `cd frontend && vercel deploy --prod` — or push to `main`, which Vercel builds automatically.
+- **Frontend:** push to `main` — Vercel is Git-connected and builds automatically.
+  Confirm this is still true after any Vercel project change; a project created
+  via `vercel deploy` is not linked to GitHub by default, and pushes silently
+  build nothing when it isn't (see DEPLOY.md § Vercel for how to check).
+  `cd frontend && vercel deploy --prod` remains the manual fallback.
 - **Backend:** push to `main`. Render redeploys on its own.
-- **Schema changes:** `init_db()` runs at startup and applies additive column changes, the
-  full-text index and backfills idempotently. There is no separate migration step.
+- **Schema changes:** run `alembic upgrade head` against the production database
+  **before** the new code serves traffic. `init_db()` no longer adds columns — it only
+  creates missing tables, the full-text index and backfills.
+
+  > **This step is not automatic on the free plan.** `render.yaml` declares
+  > `preDeployCommand: alembic upgrade head`, but Render only runs pre-deploy commands on
+  > paid instance types. On `plan: free` it is skipped silently: the new code ships, the
+  > migration does not, and every query touching a new column fails with
+  > `UndefinedColumn` — a total feed outage while `/api/health` still answers.
+  > This happened on 2026-09-13 with `0002_jobs_repost_history`.
+  >
+  > Until the API is on a paid plan, after any deploy that adds a migration:
+  >
+  > ```bash
+  > # DATABASE_URL = the External Database URL from the Render dashboard
+  > DATABASE_URL='postgresql://…' alembic upgrade head
+  > ```
+  >
+  > It is idempotent, takes under a second, and re-running it is safe. Verify with
+  > `curl -s .../api/health | grep -c UndefinedColumn` — zero means the schema is current.
 
 ### Running the scrape manually
 

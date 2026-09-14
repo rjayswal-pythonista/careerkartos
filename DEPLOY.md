@@ -126,6 +126,38 @@ in `frontend/vercel.json` and redeploy.
 
 Project settings: root directory `frontend`, framework preset **Other**.
 
+**Connect the Git repo before you finish.** A project created via `vercel deploy`
+is not wired to GitHub by default — pushes to `main` build nothing, and every
+change needs a manual `vercel deploy --prod` from `frontend/`. This bit once:
+the repo had two days of merged commits sitting undeployed with no error
+anywhere, because there was nothing to fail — the platform was simply never
+told to look.
+
+Connect it once, from `frontend/`:
+
+```bash
+vercel git connect https://github.com/<owner>/<repo>.git
+```
+
+Or in the dashboard: Project → Settings → Git → Connect Git Repository. Verify
+it actually took — the CLI prints "Connected" whether or not a link already
+existed, so that alone doesn't confirm it:
+
+```bash
+vercel project inspect <project-name>
+```
+
+If that doesn't show a git link, hit the API directly:
+
+```bash
+curl -s -H "Authorization: Bearer $(python3 -c "import json;print(json.load(open('$HOME/Library/Application Support/com.vercel.cli/auth.json'))['token'])")" \
+  "https://api.vercel.com/v9/projects/<project-id>" | python3 -m json.tool
+```
+
+A `"link"` object with `"type": "github"` and your `productionBranch` confirms
+it. From then on, every push to `main` deploys automatically — no separate
+Vercel step in this document is needed again.
+
 **The path you actually want** — rewrite the frontend as Next.js.
 
 This isn't polish. Organic search for "[Company] [Role] jobs" is the main
